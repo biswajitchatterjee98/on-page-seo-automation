@@ -59,6 +59,23 @@ class Settings:
     ssrf_guard: bool
     thresholds_path: Path
     thresholds: Thresholds
+    database_url: str | None
+    api_token: str | None
+    max_pages: int
+    crawl_retries: int
+    retry_backoff_sec: float
+    llm_enabled: bool
+    openai_api_key: str | None
+    openai_base_url: str
+    openai_model: str
+    llm_max_calls_per_job: int
+    llm_max_tokens: int
+    internal_link_min_pages: int
+    cms_provider: str
+    wp_base_url: str | None
+    wp_username: str | None
+    wp_app_password: str | None
+    cms_dry_run_default: bool
 
 
 def load_thresholds(path: Path | None = None) -> Thresholds:
@@ -88,4 +105,22 @@ def load_settings() -> Settings:
         ssrf_guard=os.environ.get("ONPAGE_SEO_SSRF_GUARD", "1") not in {"0", "false", "False"},
         thresholds_path=thresholds_path,
         thresholds=load_thresholds(thresholds_path),
+        database_url=os.environ.get("DATABASE_URL") or None,
+        api_token=os.environ.get("ONPAGE_SEO_API_TOKEN") or None,
+        max_pages=int(os.environ.get("ONPAGE_SEO_MAX_PAGES", "50")),
+        crawl_retries=int(os.environ.get("ONPAGE_SEO_CRAWL_RETRIES", "3")),
+        retry_backoff_sec=float(os.environ.get("ONPAGE_SEO_RETRY_BACKOFF_SEC", "0.5")),
+        llm_enabled=os.environ.get("ONPAGE_SEO_LLM", "0") not in {"0", "false", "False"},
+        openai_api_key=os.environ.get("OPENAI_API_KEY") or None,
+        openai_base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+        openai_model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+        llm_max_calls_per_job=int(os.environ.get("ONPAGE_SEO_LLM_MAX_CALLS_PER_JOB", "20")),
+        llm_max_tokens=int(os.environ.get("ONPAGE_SEO_LLM_MAX_TOKENS", "800")),
+        internal_link_min_pages=int(os.environ.get("ONPAGE_SEO_INTERNAL_LINK_MIN_PAGES", "3")),
+        cms_provider=os.environ.get("ONPAGE_SEO_CMS_PROVIDER", "null"),
+        wp_base_url=os.environ.get("WP_BASE_URL") or None,
+        wp_username=os.environ.get("WP_USERNAME") or None,
+        wp_app_password=os.environ.get("WP_APP_PASSWORD") or None,
+        cms_dry_run_default=os.environ.get("ONPAGE_SEO_CMS_DRY_RUN", "1")
+        not in {"0", "false", "False"},
     )

@@ -58,13 +58,35 @@ def _looks_soft_404(title: str, word_count: int, http_status: int) -> bool:
 
 
 def _fetch_static(url: str, settings: Settings) -> tuple[str, str, int]:
-    response = requests.get(
-        url,
-        timeout=settings.timeout_sec,
-        headers={"User-Agent": settings.user_agent},
-        allow_redirects=True,
-    )
-    return response.text, str(response.url), int(response.status_code)
+    # ponytail: bounded retries for transient HTTP only; upgrade: shared retry helper
+    attempts = max(1, settings.crawl_retries)
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            response = requests.get(
+                url,
+                timeout=settings.timeout_sec,
+                headers={"User-Agent": settings.user_agent},
+                allow_redirects=True,
+            )
+            status = int(response.status_code)
+            if status in {429, 500, 502, 503, 504} and attempt + 1 < attempts:
+                time.sleep(settings.retry_backoff_sec * (2**attempt))
+                continue
+            return response.text, str(response.url), status
+        except requests.Timeout as exc:
+            last_error = exc
+            if attempt + 1 >= attempts:
+                raise
+            time.sleep(settings.retry_backoff_sec * (2**attempt))
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt + 1 >= attempts:
+                raise
+            time.sleep(settings.retry_backoff_sec * (2**attempt))
+    if last_error:
+        raise last_error
+    raise RuntimeError("fetch failed without response")
 
 
 def _fetch_playwright(url: str, settings: Settings) -> tuple[str, str, int]:

@@ -606,10 +606,17 @@ flowchart TD
 
 ---
 
-## 15. Immediate Next Build Step
+## 15. Status
 
-> Implement **P0**: production-shaped crawler + versioned rule engine + CLI audit for one URL (robots, errors, weighted score, density, logs, tests, `.env.example`, Dockerfile).  
-> No n8n, no LLM, no CMS until that path is trusted on real pages.
+**Production v1 (P0–P4) is implemented** in this repo.
 
-That is the production foundation everything else hangs off.
+| Phase | Status |
+|-------|--------|
+| P0 Core | Done |
+| P1 Pipeline / API / n8n | Done |
+| P2 LLM + validator | Done |
+| P3 Dashboard + trends | Done |
+| P4 CMS queue + approve + dry-run/apply + audit + post-fix verify | Done |
+
+Operational next steps (not missing code): configure `DATABASE_URL`, dashboard auth, optional `OPENAI_API_KEY`, WordPress credentials, import the n8n workflow, and run dry-runs before live CMS applies.
 ```

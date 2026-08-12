@@ -15,6 +15,8 @@ def build_report(
     keywords: list[str],
     thresholds: Thresholds,
     competitor_avg_word_count: float | None = None,
+    duplicate_titles: set[str] | None = None,
+    duplicate_metas: set[str] | None = None,
 ) -> dict[str, Any]:
     if page.get("status") == "error":
         return {
@@ -54,6 +56,8 @@ def build_report(
         page,
         keywords,
         thresholds,
+        duplicate_titles=duplicate_titles,
+        duplicate_metas=duplicate_metas,
         competitor_avg_word_count=competitor_avg_word_count,
     )
     overall, maximum = score_checks(checks)
