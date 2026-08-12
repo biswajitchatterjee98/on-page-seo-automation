@@ -1,0 +1,11 @@
+.onpage-seo
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+dist/
+*.egg-info/
+.mypy_cache/
+playwright-report/

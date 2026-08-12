@@ -1,0 +1,29 @@
+rules_version: "1.0.0"
+
+title_min: 50
+title_max: 60
+meta_min: 150
+meta_max: 160
+intro_word_count: 100
+min_word_count: 300
+keyword_density_min_pct: 0.5
+keyword_density_max_pct: 2.5
+expect_schema: false
+warn_score_ratio: 0.5
+empty_body_word_threshold: 20
+competitor_length_factor: 0.8
+
+weights:
+  title_length: 10
+  meta_description_length: 10
+  keyword_in_title: 10
+  keyword_in_h1: 10
+  keyword_in_intro: 8
+  keyword_in_url: 5
+  keyword_density: 8
+  image_alt: 10
+  heading_hierarchy: 8
+  thin_content: 8
+  competitor_length: 5
+  schema_presence: 4
+  duplicate_title_meta: 4
