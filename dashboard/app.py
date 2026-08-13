@@ -38,9 +38,8 @@ def _require_login() -> bool:
 
 def main() -> None:
     st.set_page_config(page_title="On-page SEO", layout="wide")
-    _require_login()
-
     settings = load_settings()
+    _require_login()
     store = open_store(settings.database_url)
     drop_points = int(os.environ.get("ONPAGE_SEO_REGRESSION_POINTS", "5"))
 

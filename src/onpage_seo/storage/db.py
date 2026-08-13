@@ -691,8 +691,15 @@ class PostgresStore:
 
 
 def open_store(database_url: str | None) -> Store:
-    if database_url:
-        store = PostgresStore(database_url)
-        store.ensure_schema()
-        return store
+    if database_url and (database_url.startswith("postgres://") or database_url.startswith("postgresql://")):
+        try:
+            store = PostgresStore(database_url)
+            store.ensure_schema()
+            return store
+        except Exception as exc:
+            import logging
+            logging.getLogger("onpage_seo").warning(
+                "PostgreSQL connection failed (%s) — falling back to local in-memory store", exc
+            )
+            return MemoryStore()
     return MemoryStore()

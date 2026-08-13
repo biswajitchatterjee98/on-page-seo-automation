@@ -13,6 +13,29 @@ _ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_THRESHOLDS = _ROOT / "config" / "thresholds.yaml"
 
 
+def load_env_file(path: Path | None = None) -> None:
+    env_path = path or (_ROOT / ".env")
+    if not env_path.is_file():
+        return
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(env_path)
+    except ImportError:
+        with env_path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip("'\"")
+                if k not in os.environ:
+                    os.environ[k] = v
+
+
+load_env_file()
+
+
 @dataclass(frozen=True)
 class Thresholds:
     rules_version: str
