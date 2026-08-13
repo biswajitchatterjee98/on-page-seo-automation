@@ -72,7 +72,7 @@ class WordPressCmsAdapter:
         if field == "title":
             body["title"] = payload.get("value")
         elif field == "meta_description":
-            # ponytail: store in excerpt; upgrade: Yoast / RankMath meta keys when known
+            # ponytail: WordPress excerpt, not Yoast/RankMath meta; upgrade when plugin is known
             body["excerpt"] = payload.get("value")
         elif field == "alt_text":
             raise CmsError("alt_text apply via WordPress media API not implemented in P4")

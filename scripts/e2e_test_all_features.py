@@ -53,7 +53,7 @@ def test_p2_llm_suggestions():
     if not settings.llm_enabled:
         print("[INFO] LLM is currently disabled (ONPAGE_SEO_LLM=0). Skipping live AI API test.")
     else:
-        print(f"[OK] P2 LLM Enabled! Base URL: {settings.openai_base_url}, Model: {settings.openai_model}")
+        print(f"[OK] P2 LLM Enabled! Base URL: {settings.llm_base_url}, Model: {settings.llm_model}")
 
 
 def test_p3_p4_suggestion_queue_and_cms_dryrun():

@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 
 import requests
 
 from onpage_seo.config import Settings
 from onpage_seo.crawl.extract import extract_page
-from onpage_seo.security.ssrf import SsrfBlockedError, assert_url_safe
+from onpage_seo.security.ssrf import SsrfBlockedError, assert_url_safe, resolve_redirect_url
+
+logger = logging.getLogger("onpage_seo")
 
 _SOFT_404_MARKERS = ("404", "not found", "page not found", "does not exist")
+_MAX_REDIRECTS = 5
+_RETRY_STATUSES = {429, 500, 502, 503, 504}
+_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
 
 def _utc_now() -> str:
@@ -31,15 +37,27 @@ def _error(url: str, error_code: str, detail: str) -> dict[str, Any]:
     }
 
 
-def _robots_allowed(url: str, user_agent: str, timeout_sec: float) -> bool:
+def _robots_allowed(
+    url: str,
+    user_agent: str,
+    timeout_sec: float,
+    *,
+    enforce_ssrf: bool,
+) -> bool:
     parsed = urlparse(url)
     robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+    if enforce_ssrf:
+        try:
+            assert_url_safe(robots_url)
+        except SsrfBlockedError:
+            return False
     parser = RobotFileParser()
     try:
         response = requests.get(
             robots_url,
             timeout=timeout_sec,
             headers={"User-Agent": user_agent},
+            allow_redirects=False,
         )
         if response.status_code >= 400:
             # ponytail: missing/unreadable robots → allow; upgrade: cache + stricter policy
@@ -57,28 +75,49 @@ def _looks_soft_404(title: str, word_count: int, http_status: int) -> bool:
     return word_count < 80 and any(marker in lowered for marker in _SOFT_404_MARKERS)
 
 
-def _fetch_static(url: str, settings: Settings) -> tuple[str, str, int]:
-    # ponytail: bounded retries for transient HTTP only; upgrade: shared retry helper
+def get_following_redirects(
+    url: str,
+    settings: Settings,
+    *,
+    enforce_ssrf: bool,
+) -> tuple[str, str, int]:
+    current = url
+    for _ in range(_MAX_REDIRECTS + 1):
+        if enforce_ssrf:
+            assert_url_safe(current)
+        response = requests.get(
+            current,
+            timeout=settings.timeout_sec,
+            headers={"User-Agent": settings.user_agent},
+            allow_redirects=False,
+        )
+        status = int(response.status_code)
+        if status in _REDIRECT_STATUSES:
+            current = resolve_redirect_url(current, response.headers.get("Location") or "")
+            continue
+        return response.text, str(response.url or current), status
+    raise SsrfBlockedError(f"too many redirects from {url}")
+
+
+def _fetch_static(
+    url: str,
+    settings: Settings,
+    *,
+    enforce_ssrf: bool,
+) -> tuple[str, str, int]:
     attempts = max(1, settings.crawl_retries)
     last_error: Exception | None = None
     for attempt in range(attempts):
         try:
-            response = requests.get(
-                url,
-                timeout=settings.timeout_sec,
-                headers={"User-Agent": settings.user_agent},
-                allow_redirects=True,
+            html, final_url, status = get_following_redirects(
+                url, settings, enforce_ssrf=enforce_ssrf
             )
-            status = int(response.status_code)
-            if status in {429, 500, 502, 503, 504} and attempt + 1 < attempts:
+            if status in _RETRY_STATUSES and attempt + 1 < attempts:
                 time.sleep(settings.retry_backoff_sec * (2**attempt))
                 continue
-            return response.text, str(response.url), status
-        except requests.Timeout as exc:
-            last_error = exc
-            if attempt + 1 >= attempts:
-                raise
-            time.sleep(settings.retry_backoff_sec * (2**attempt))
+            return html, final_url, status
+        except SsrfBlockedError:
+            raise
         except requests.RequestException as exc:
             last_error = exc
             if attempt + 1 >= attempts:
@@ -110,6 +149,27 @@ def _fetch_playwright(url: str, settings: Settings) -> tuple[str, str, int]:
             browser.close()
 
 
+def _extracted_page(
+    html: str,
+    *,
+    url: str,
+    final_url: str,
+    http_status: int,
+    render_mode: str,
+    primary_keyword: str | None,
+) -> dict[str, Any]:
+    page = extract_page(
+        html,
+        url=url,
+        final_url=final_url,
+        http_status=http_status,
+        render_mode=render_mode,
+        primary_keyword=primary_keyword,
+    )
+    page["fetched_at"] = _utc_now()
+    return page
+
+
 def crawl_url(
     url: str,
     settings: Settings,
@@ -127,7 +187,9 @@ def crawl_url(
         except SsrfBlockedError as exc:
             return _error(url, "ssrf_blocked", str(exc))
 
-    if not ignore_robots and not _robots_allowed(url, settings.user_agent, settings.timeout_sec):
+    if not ignore_robots and not _robots_allowed(
+        url, settings.user_agent, settings.timeout_sec, enforce_ssrf=use_ssrf
+    ):
         return _error(url, "robots_disallowed", "URL disallowed by robots.txt")
 
     mode = render_mode if render_mode != "auto" else "static"
@@ -135,20 +197,20 @@ def crawl_url(
         if mode == "playwright":
             html, final_url, status = _fetch_playwright(url, settings)
         else:
-            html, final_url, status = _fetch_static(url, settings)
+            html, final_url, status = _fetch_static(url, settings, enforce_ssrf=use_ssrf)
+    except SsrfBlockedError as exc:
+        return _error(url, "ssrf_blocked", str(exc))
     except requests.Timeout:
         return _error(url, "timeout", f"request exceeded {settings.timeout_sec}s")
     except requests.RequestException as exc:
         return _error(url, "http_error", str(exc))
     except RuntimeError as exc:
         return _error(url, "unknown", str(exc))
-    except Exception as exc:  # noqa: BLE001 — boundary: always return typed error
-        return _error(url, "unknown", str(exc))
 
     if status >= 400:
         return _error(url, "http_error", f"HTTP {status}")
 
-    page = extract_page(
+    page = _extracted_page(
         html,
         url=url,
         final_url=final_url,
@@ -156,14 +218,12 @@ def crawl_url(
         render_mode=mode,
         primary_keyword=primary_keyword,
     )
-    page["fetched_at"] = _utc_now()
 
     threshold = settings.thresholds.empty_body_word_threshold
     if page["word_count"] < threshold and render_mode == "auto":
-        # JS-heavy fallback
         try:
             html, final_url, status = _fetch_playwright(url, settings)
-            page = extract_page(
+            page = _extracted_page(
                 html,
                 url=url,
                 final_url=final_url,
@@ -171,10 +231,17 @@ def crawl_url(
                 render_mode="playwright",
                 primary_keyword=primary_keyword,
             )
-            page["fetched_at"] = _utc_now()
-        except Exception:
-            # keep static result; may become empty_body below
-            pass
+        except Exception as exc:
+            # ponytail: keep static extract if Playwright missing/fails; empty_body may still fire
+            logger.info(
+                "playwright fallback skipped",
+                extra={
+                    "url": url,
+                    "stage": "playwright",
+                    "status": "error",
+                    "error_code": str(exc),
+                },
+            )
 
     if page["word_count"] < threshold:
         return _error(url, "empty_body", f"extracted fewer than {threshold} words")
@@ -186,8 +253,3 @@ def crawl_url(
         time.sleep(settings.crawl_delay_sec)
 
     return page
-
-
-def absolute_robots_url(page_url: str) -> str:
-    parsed = urlparse(page_url)
-    return urljoin(f"{parsed.scheme}://{parsed.netloc}", "/robots.txt")

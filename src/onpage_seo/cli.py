@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import uuid
 from pathlib import Path
 
@@ -58,7 +59,7 @@ def _add_shared_crawl_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--llm",
         action="store_true",
-        help="Enable LLM enrichment for this run (requires OPENAI_API_KEY)",
+        help="Enable LLM enrichment for this run (requires GROQ_API_KEY)",
     )
     parser.add_argument(
         "--rules-only",
@@ -168,6 +169,7 @@ def _write_out(payload: object, out: Path | None) -> None:
     if out:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text + "\n", encoding="utf-8")
+        print(f"Wrote {out.resolve()}", file=sys.stderr)
 
 
 def run_audit(args: argparse.Namespace) -> int:
@@ -281,6 +283,14 @@ def run_batch(args: argparse.Namespace) -> int:
 def run_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
+    from onpage_seo.storage import is_postgres_url
+
+    settings = load_settings()
+    if not is_postgres_url(settings.database_url):
+        raise SystemExit(
+            "onpage-seo serve requires DATABASE_URL=postgresql://... "
+            "(in-memory store cannot survive restarts)"
+        )
     uvicorn.run("onpage_seo.api.server:app", host=args.host, port=args.port, reload=False)
     return 0
 

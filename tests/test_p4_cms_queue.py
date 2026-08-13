@@ -100,7 +100,7 @@ def test_only_approved_can_apply():
     assert dry_event["before_json"] is not None
     assert dry_event["after_json"]["dry_run"] is True
 
-    # live apply with null CMS + skip network verify
+    # live apply with null CMS must not mark applied
     result_live = apply_suggestion(
         store,
         sid,
@@ -110,8 +110,8 @@ def test_only_approved_can_apply():
         cms=NullCmsAdapter(),
         verify=False,
     )
-    assert result_live["suggestion"]["status"] == "applied"
-    assert "before_json" in (store.list_audit_events(sid)[-1] or {}) or True
+    assert result_live.get("skipped") is True
+    assert store.get_suggestion(sid)["status"] == "approved"
 
 
 def test_live_apply_with_null_cms_and_reject_gate():
@@ -236,13 +236,19 @@ def test_post_fix_verify_flags_regression(monkeypatch):
             "alert_text": "ALERT post-fix regression",
         },
     )
+    class OkCms:
+        name = "ok"
+
+        def apply(self, **kwargs):
+            return {"applied": True, "url": kwargs.get("url"), "field": kwargs.get("field")}
+
     result = apply_suggestion(
         store,
         sid,
         actor="reviewer",
         settings=settings,
         dry_run=False,
-        cms=NullCmsAdapter(),
+        cms=OkCms(),
         verify=True,
     )
     assert result["suggestion"]["status"] == "applied"

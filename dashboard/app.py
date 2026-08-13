@@ -130,6 +130,10 @@ def main() -> None:
     pending = store.list_suggestions(status="pending", limit=50)
     approved = store.list_suggestions(status="approved", limit=50)
     st.caption(f"Pending: {len(pending)} · Approved: {len(approved)}")
+    from onpage_seo.cms import apply_suggestion, approve_suggestion, reject_suggestion
+
+    actor = st.text_input("Actor", value=st.session_state.get("dash_user") or "dashboard")
+
     if pending:
         st.dataframe(
             [
@@ -144,31 +148,53 @@ def main() -> None:
             ],
             use_container_width=True,
         )
-        selected_id = st.number_input("Suggestion id", min_value=1, step=1, value=int(pending[0]["id"]))
-        actor = st.text_input("Actor", value=st.session_state.get("dash_user") or "dashboard")
-        c1, c2, c3 = st.columns(3)
-        from onpage_seo.cms import apply_suggestion, approve_suggestion, reject_suggestion
-
+        pending_id = st.number_input(
+            "Pending suggestion id", min_value=1, step=1, value=int(pending[0]["id"])
+        )
+        c1, c2 = st.columns(2)
         if c1.button("Approve"):
             try:
-                approve_suggestion(store, int(selected_id), actor=actor)
-                st.success(f"Approved #{selected_id}")
+                approve_suggestion(store, int(pending_id), actor=actor)
+                st.success(f"Approved #{pending_id}")
                 st.rerun()
             except ValueError as exc:
                 st.error(str(exc))
         if c2.button("Reject"):
             try:
-                reject_suggestion(store, int(selected_id), actor=actor, reason="dashboard reject")
-                st.success(f"Rejected #{selected_id}")
+                reject_suggestion(store, int(pending_id), actor=actor, reason="dashboard reject")
+                st.success(f"Rejected #{pending_id}")
                 st.rerun()
             except ValueError as exc:
                 st.error(str(exc))
-        dry = c3.checkbox("Dry-run apply", value=True)
-        if c3.button("Apply approved"):
+    else:
+        st.info("No pending suggestions. LLM-accepted drafts appear here after jobs run.")
+
+    if approved:
+        st.markdown("**Approved (apply)**")
+        st.dataframe(
+            [
+                {
+                    "id": row["id"],
+                    "url": row["url"],
+                    "field": row["field"],
+                    "proposed": (row.get("payload_json") or {}).get("value"),
+                }
+                for row in approved
+            ],
+            use_container_width=True,
+        )
+        approved_id = st.number_input(
+            "Approved suggestion id", min_value=1, step=1, value=int(approved[0]["id"])
+        )
+        live_locked = settings.cms_dry_run_default
+        if live_locked:
+            st.caption("ONPAGE_SEO_CMS_DRY_RUN=1 — apply is dry-run only")
+        dry = True if live_locked else st.checkbox("Dry-run apply", value=True)
+        if st.button("Apply"):
             try:
                 result = apply_suggestion(
                     store,
-                    int(selected_id),
+                    int(approved_id),
                     actor=actor,
                     settings=settings,
                     dry_run=dry,
@@ -180,8 +206,7 @@ def main() -> None:
                 st.json(result)
             except ValueError as exc:
                 st.error(str(exc))
-    else:
-        st.info("No pending suggestions. LLM-accepted drafts appear here after jobs run.")
+
 
     if st.button("Sign out"):
         st.session_state.authenticated = False

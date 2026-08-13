@@ -52,7 +52,7 @@ These are the Phase-1 decisions. Defaults below are production-sane; change only
 | First input mode | Single URL + URL list file | Sitemap crawl in P1 once single-URL path is stable |
 | Keyword source | Manual keywords per URL/job in config/JSON | GSC adapter later behind the same interface |
 | Primary CMS | WordPress REST API | Thin adapter interface so others can plug in |
-| LLM provider | One provider via env (`OPENAI_API_KEY` or equivalent) | Direct HTTP client first; LangChain only if it stays thin |
+| LLM provider | Groq via `GROQ_API_KEY` (OpenAI-compatible HTTP) | Direct HTTP client; `OPENAI_*` fallback for Ollama/Gemini |
 | Orchestration | n8n for schedule / webhook / Slack | Business logic stays in Python |
 | Storage | Postgres for production; SQLite allowed for local only | Same schema; driver switch via config |
 | Dashboard | Streamlit internal (auth-protected) | Read-only against DB |
@@ -608,15 +608,17 @@ flowchart TD
 
 ## 15. Status
 
-**Production v1 (P0–P4) is implemented** in this repo.
+**P0–P4 product loop is implemented. Production hardening is partial — do not treat this as go-live.**
 
 | Phase | Status |
 |-------|--------|
-| P0 Core | Done |
-| P1 Pipeline / API / n8n | Done |
-| P2 LLM + validator | Done |
-| P3 Dashboard + trends | Done |
-| P4 CMS queue + approve + dry-run/apply + audit + post-fix verify | Done |
+| P0 Core | Implemented |
+| P1 Pipeline / API / n8n | Implemented |
+| P2 LLM + validator | Implemented |
+| P3 Dashboard + trends | Implemented |
+| P4 CMS queue + approve + dry-run/apply + audit + post-fix verify | Implemented |
+| Fail-closed Postgres, redirect SSRF, API policy gates | Implemented |
+| Durable worker, connection pool, CI, Playwright image, WP canonical apply | Not done |
 
-Operational next steps (not missing code): configure `DATABASE_URL`, dashboard auth, optional `OPENAI_API_KEY`, WordPress credentials, import the n8n workflow, and run dry-runs before live CMS applies.
+You can fill `.env` for **local** runs now (`GROQ_API_KEY`, dashboard password, optional `DATABASE_URL`). Keep `ONPAGE_SEO_CMS_DRY_RUN=1` until staging apply is trusted. Do not point live WordPress credentials at this stack until the remaining ops items above are done.
 ```

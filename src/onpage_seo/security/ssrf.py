@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 
 class SsrfBlockedError(ValueError):
@@ -41,3 +41,9 @@ def assert_url_safe(url: str) -> None:
         ip = ipaddress.ip_address(info[4][0])
         if _is_blocked_ip(ip):
             raise SsrfBlockedError(f"blocked address {ip} for host {host}")
+
+
+def resolve_redirect_url(current_url: str, location: str) -> str:
+    if not location or not location.strip():
+        raise SsrfBlockedError("empty redirect Location")
+    return urljoin(current_url, location.strip())

@@ -6,7 +6,7 @@ import hashlib
 import json
 import logging
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +39,11 @@ class JobConfig:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> JobConfig:
+        allowed = {item.name for item in fields(cls)}
+        return cls(**{key: value for key, value in data.items() if key in allowed})
 
     def config_hash(self, rules_version: str) -> str:
         payload = {
@@ -152,6 +157,41 @@ def run_job(
     else:
         store.update_job(job_id, status="running")
 
+    try:
+        return _run_job_body(
+            config,
+            settings,
+            store=store,
+            job_id=job_id,
+            rules_version=rules_version,
+            config_hash=config_hash,
+            max_pages=max_pages,
+            targets=targets,
+        )
+    except Exception as exc:
+        store.update_job(
+            job_id,
+            status="failed",
+            summary_json={
+                "job_id": job_id,
+                "status": "failed",
+                "error": str(exc),
+            },
+        )
+        raise
+
+
+def _run_job_body(
+    config: JobConfig,
+    settings: Settings,
+    *,
+    store: Store,
+    job_id: str,
+    rules_version: str,
+    config_hash: str,
+    max_pages: int,
+    targets: list[str],
+) -> dict[str, Any]:
     competitor_avg = config.competitor_word_count
     if competitor_avg is None and config.competitor_urls:
         word_counts: list[int] = []

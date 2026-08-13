@@ -100,8 +100,17 @@ class Store(Protocol):
 
     def list_audit_events(self, suggestion_id: int) -> list[dict[str, Any]]: ...
 
+    def fail_stale_running(self) -> int: ...
+
+    def claim_next_queued(self) -> JobRecord | None: ...
+
+    def find_open_suggestion(
+        self, *, url: str, field: str, value: str
+    ) -> int | None: ...
+
 
 class MemoryStore:
+    """In-memory store for tests and local CLI without DATABASE_URL."""
     def __init__(self) -> None:
         self.jobs: dict[str, JobRecord] = {}
         self.pages: dict[str, list[dict[str, Any]]] = {}
@@ -144,6 +153,39 @@ class MemoryStore:
 
     def get_job(self, job_id: str) -> JobRecord | None:
         return self.jobs.get(job_id)
+
+    def fail_stale_running(self) -> int:
+        count = 0
+        for job in self.jobs.values():
+            if job.status == "running":
+                job.status = "failed"
+                job.summary_json = {"error": "stale_running_on_restart"}
+                job.updated_at = _utc_now()
+                count += 1
+        return count
+
+    def claim_next_queued(self) -> JobRecord | None:
+        queued = sorted(
+            [job for job in self.jobs.values() if job.status == "queued"],
+            key=lambda job: job.created_at,
+        )
+        if not queued:
+            return None
+        job = queued[0]
+        job.status = "running"
+        job.updated_at = _utc_now()
+        return job
+
+    def find_open_suggestion(self, *, url: str, field: str, value: str) -> int | None:
+        for item in self.suggestions.values():
+            if item["url"] != url or item["field"] != field:
+                continue
+            if item["status"] not in {"pending", "approved"}:
+                continue
+            payload = item.get("payload_json") or {}
+            if str(payload.get("value") or "") == value:
+                return int(item["id"])
+        return None
 
     def save_page(
         self,
@@ -394,6 +436,55 @@ class PostgresStore:
                 (job_id,),
             ).fetchone()
         return self._row_to_job(row) if row else None
+
+    def fail_stale_running(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                UPDATE jobs
+                SET status = 'failed',
+                    summary_json = '{"error":"stale_running_on_restart"}'::jsonb,
+                    updated_at = NOW()
+                WHERE status = 'running'
+                """
+            )
+            conn.commit()
+            return int(row.rowcount or 0)
+
+    def claim_next_queued(self) -> JobRecord | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                UPDATE jobs
+                SET status = 'running', updated_at = NOW()
+                WHERE id = (
+                    SELECT id FROM jobs
+                    WHERE status = 'queued'
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING id, status, config_json, config_hash, rules_version, summary_json,
+                          created_at, updated_at
+                """
+            ).fetchone()
+            conn.commit()
+        return self._row_to_job(row) if row else None
+
+    def find_open_suggestion(self, *, url: str, field: str, value: str) -> int | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id FROM suggestions
+                WHERE url = %s AND field = %s
+                  AND status IN ('pending', 'approved')
+                  AND payload_json->>'value' = %s
+                ORDER BY id ASC
+                LIMIT 1
+                """,
+                (url, field, value),
+            ).fetchone()
+        return int(row[0]) if row else None
 
     def save_page(
         self,
@@ -690,16 +781,14 @@ class PostgresStore:
         )
 
 
+def is_postgres_url(database_url: str | None) -> bool:
+    return bool(database_url) and database_url.startswith(("postgres://", "postgresql://"))
+
+
 def open_store(database_url: str | None) -> Store:
-    if database_url and (database_url.startswith("postgres://") or database_url.startswith("postgresql://")):
-        try:
-            store = PostgresStore(database_url)
-            store.ensure_schema()
-            return store
-        except Exception as exc:
-            import logging
-            logging.getLogger("onpage_seo").warning(
-                "PostgreSQL connection failed (%s) — falling back to local in-memory store", exc
-            )
-            return MemoryStore()
+    # ponytail: MemoryStore for local/tests; Postgres required in prod. No silent fallback.
+    if is_postgres_url(database_url) and database_url:
+        store = PostgresStore(database_url)
+        store.ensure_schema()
+        return store
     return MemoryStore()

@@ -73,6 +73,13 @@ def enqueue_from_report(
 ) -> list[int]:
     ids: list[int] = []
     for item in build_queue_items(report, page):
+        value = str((item["payload"] or {}).get("value") or "")
+        existing = store.find_open_suggestion(
+            url=item["url"], field=item["field"], value=value
+        )
+        if existing is not None:
+            ids.append(existing)
+            continue
         suggestion_id = store.create_suggestion(
             report_id=report_id,
             job_id=job_id,

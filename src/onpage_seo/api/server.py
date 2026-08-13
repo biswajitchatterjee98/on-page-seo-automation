@@ -2,24 +2,61 @@
 
 from __future__ import annotations
 
+import hmac
+import logging
 import os
 import threading
 import uuid
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import Any, Iterator
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 
 from onpage_seo.cms import apply_suggestion, approve_suggestion, reject_suggestion
 from onpage_seo.config import load_settings
 from onpage_seo.pipeline import JobConfig, run_job
 from onpage_seo.security.ssrf import SsrfBlockedError, assert_url_safe
-from onpage_seo.storage import JobRecord, Store, open_store
+from onpage_seo.storage import JobRecord, Store, is_postgres_url, open_store
 
-app = FastAPI(title="On-Page SEO API", version="0.5.0")
+logger = logging.getLogger("onpage_seo")
+
+# ponytail: one worker thread polls queued jobs so restart can reclaim work from DB
 _run_lock = threading.Lock()
 _store: Store | None = None
 _store_lock = threading.Lock()
+_stop_worker = threading.Event()
+
+
+def _worker_loop() -> None:
+    while not _stop_worker.is_set():
+        try:
+            settings = load_settings()
+            store = get_store()
+            with _run_lock:
+                job = store.claim_next_queued()
+                if job is None:
+                    pass
+                else:
+                    config = JobConfig.from_dict(job.config_json or {})
+                    run_job(config, settings, store=store, job_id=job.id)
+        except Exception:
+            logger.exception("job worker failed")
+        _stop_worker.wait(0.5)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> Iterator[None]:
+    store = get_store()
+    store.fail_stale_running()
+    _stop_worker.clear()
+    thread = threading.Thread(target=_worker_loop, name="onpage-job-worker", daemon=True)
+    thread.start()
+    yield
+    _stop_worker.set()
+
+
+app = FastAPI(title="On-Page SEO API", version="0.5.0", lifespan=lifespan)
 
 
 class CreateJobBody(BaseModel):
@@ -64,7 +101,8 @@ def require_token(authorization: str | None = Header(default=None)) -> None:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="missing bearer token")
     token = authorization.removeprefix("Bearer ").strip()
-    if token != expected:
+    token_ok = len(token) == len(expected) and hmac.compare_digest(token, expected)
+    if not token_ok:
         raise HTTPException(status_code=401, detail="invalid token")
 
 
@@ -77,12 +115,18 @@ def _validate_urls(urls: list[str]) -> None:
 
 
 def _to_config(body: CreateJobBody) -> JobConfig:
+    if body.ignore_robots:
+        raise HTTPException(status_code=400, detail="ignore_robots is not allowed via API")
     urls = [str(url) for url in body.urls]
     competitors = [str(url) for url in body.competitor_urls]
     sitemap = str(body.sitemap_url) if body.sitemap_url else None
     _validate_urls(urls + competitors + ([sitemap] if sitemap else []))
     if not urls and not sitemap:
         raise HTTPException(status_code=400, detail="urls or sitemap_url required")
+    settings = load_settings()
+    enable_llm = settings.llm_enabled if body.enable_llm is None else (
+        bool(body.enable_llm) and settings.llm_enabled
+    )
     return JobConfig(
         urls=urls,
         sitemap_url=sitemap,
@@ -91,11 +135,11 @@ def _to_config(body: CreateJobBody) -> JobConfig:
         competitor_word_count=body.competitor_word_count,
         max_pages=body.max_pages,
         render_mode=body.render_mode,
-        ignore_robots=body.ignore_robots,
+        ignore_robots=False,
         enforce_ssrf=True,
         fail_fast=body.fail_fast,
         reuse_completed=body.reuse_completed,
-        enable_llm=body.enable_llm,
+        enable_llm=enable_llm,
     )
 
 
@@ -104,8 +148,19 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/ready")
+def ready() -> dict[str, str]:
+    settings = load_settings()
+    if is_postgres_url(settings.database_url):
+        try:
+            get_store().list_recent_jobs(limit=1)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"database unavailable: {exc}") from exc
+    return {"status": "ok"}
+
+
 @app.post("/jobs", dependencies=[Depends(require_token)])
-def create_job(body: CreateJobBody, background: BackgroundTasks) -> dict[str, Any]:
+def create_job(body: CreateJobBody) -> dict[str, Any]:
     settings = load_settings()
     config = _to_config(body)
     store = get_store()
@@ -124,12 +179,6 @@ def create_job(body: CreateJobBody, background: BackgroundTasks) -> dict[str, An
             rules_version=rules_version,
         )
     )
-
-    def _run() -> None:
-        with _run_lock:
-            run_job(config, settings, store=store, job_id=job_id)
-
-    background.add_task(_run)
     return {"job_id": job_id, "status": "queued"}
 
 
@@ -195,7 +244,7 @@ def api_reject(suggestion_id: int, body: ActorBody) -> dict[str, Any]:
 @app.post("/suggestions/{suggestion_id}/apply", dependencies=[Depends(require_token)])
 def api_apply(suggestion_id: int, body: ApplyBody) -> dict[str, Any]:
     settings = load_settings()
-    dry_run = settings.cms_dry_run_default if body.dry_run is None else body.dry_run
+    dry_run = True if settings.cms_dry_run_default else bool(body.dry_run)
     try:
         return apply_suggestion(
             get_store(),

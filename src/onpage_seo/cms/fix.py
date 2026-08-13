@@ -164,6 +164,21 @@ def apply_suggestion(
             field=str(suggestion["field"]),
             payload=payload,
         )
+        if not after.get("applied"):
+            store.add_audit_event(
+                suggestion_id,
+                action="apply_skipped",
+                actor=actor,
+                before_json=before,
+                after_json=after,
+                detail="CMS adapter did not mutate (null/no-op)",
+            )
+            return {
+                "suggestion": suggestion,
+                "dry_run": False,
+                "after": after,
+                "skipped": True,
+            }
         store.update_suggestion_status(suggestion_id, status="applied")
         store.add_audit_event(
             suggestion_id,

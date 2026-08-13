@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from onpage_seo.config import load_settings
 from onpage_seo.discover import dedupe_cap, parse_sitemap_xml
 from onpage_seo.pipeline import JobConfig, _duplicate_values, run_job
-from onpage_seo.storage import MemoryStore
+from onpage_seo.storage import JobRecord, MemoryStore
 
 
 def test_parse_sitemap_urlset():
@@ -132,3 +132,116 @@ def test_api_rejects_ssrf_and_missing_auth(monkeypatch):
     )
     assert blocked.status_code == 400
     assert "ssrf_blocked" in blocked.json()["detail"]
+
+    robots = client.post(
+        "/jobs",
+        headers={"Authorization": "Bearer secret"},
+        json={"urls": ["https://example.com/"], "ignore_robots": True},
+    )
+    assert robots.status_code == 400
+    assert "ignore_robots" in robots.json()["detail"]
+
+    assert client.get("/ready").status_code == 200
+
+
+def test_redirect_to_loopback_is_ssrf_blocked(monkeypatch):
+    from onpage_seo.crawl import fetch as fetch_mod
+    from onpage_seo.config import load_settings
+
+    class _Resp:
+        def __init__(self, status_code, location=None, text="", url=""):
+            self.status_code = status_code
+            self.headers = {"Location": location} if location else {}
+            self.text = text
+            self.url = url
+
+    calls = {"n": 0}
+
+    def fake_get(url, **_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _Resp(302, location="http://127.0.0.1/secret", url=url)
+        raise AssertionError("must not follow loopback redirect")
+
+    monkeypatch.setattr(fetch_mod.requests, "get", fake_get)
+    monkeypatch.setattr(fetch_mod, "_robots_allowed", lambda *_a, **_k: True)
+    page = fetch_mod.crawl_url(
+        "https://example.com/open",
+        load_settings(),
+        enforce_ssrf=True,
+        render_mode="static",
+    )
+    assert page["status"] == "error"
+    assert page["error_code"] == "ssrf_blocked"
+
+
+def test_claim_and_fail_stale_running():
+    store = MemoryStore()
+    running = JobRecord(
+        id="run-1",
+        status="running",
+        config_json={},
+        config_hash="a",
+        rules_version="1.0.0",
+    )
+    queued = JobRecord(
+        id="q-1",
+        status="queued",
+        config_json={"urls": ["https://example.com"]},
+        config_hash="b",
+        rules_version="1.0.0",
+    )
+    store.create_job(running)
+    store.create_job(queued)
+    assert store.fail_stale_running() == 1
+    assert store.get_job("run-1").status == "failed"
+    claimed = store.claim_next_queued()
+    assert claimed is not None
+    assert claimed.id == "q-1"
+    assert claimed.status == "running"
+    assert store.claim_next_queued() is None
+
+
+def test_enqueue_dedupes_open_suggestions():
+    store = MemoryStore()
+    store.create_job(
+        JobRecord(
+            id="job-d",
+            status="completed",
+            config_json={},
+            config_hash="d",
+            rules_version="1.0.0",
+        )
+    )
+    page_id = store.save_page(
+        "job-d",
+        url="https://example.com/post",
+        status="ok",
+        http_status=200,
+        error_code=None,
+        page_json={},
+    )
+    from onpage_seo.queue import enqueue_from_report
+
+    page = {
+        "url": "https://example.com/post",
+        "title": "Old",
+        "meta_description": "",
+        "images": [],
+    }
+    report = {
+        "status": "ok",
+        "url": page["url"],
+        "llm": {
+            "suggestions": {
+                "title": ["Best espresso machines for home baristas now"],
+                "meta_description": [],
+                "alt_text": [],
+            }
+        },
+    }
+    report_id = store.save_report(page_id, 80, report)
+    first = enqueue_from_report(store, job_id="job-d", report_id=report_id, report=report, page=page)
+    second = enqueue_from_report(store, job_id="job-d", report_id=report_id, report=report, page=page)
+    assert first == second
+    assert len(store.list_suggestions(status="pending")) == 1

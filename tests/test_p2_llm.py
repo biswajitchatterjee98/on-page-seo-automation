@@ -8,7 +8,7 @@ from onpage_seo.llm.analyze import enrich_report_with_llm
 from onpage_seo.llm.client import LlmBudget, LlmClient
 from onpage_seo.readability import flesch_reading_ease
 from onpage_seo.report import build_report
-from onpage_seo.validate import partition_suggestions, validate_title
+from onpage_seo.validate import looks_truncated, partition_suggestions, validate_title
 
 
 def test_robots_disallowed(monkeypatch):
@@ -34,7 +34,19 @@ def test_robots_disallowed(monkeypatch):
     assert report["rules"] == []
 
 
-def test_invalid_title_suggestion_rejected():
+def test_truncated_in_band_title_rejected():
+    thresholds = load_settings().thresholds
+    chopped = "Digital Transformation Consulting Services in India hel"
+    assert thresholds.title_min <= len(chopped) <= thresholds.title_max
+    assert looks_truncated(chopped)
+    ok, reason = validate_title(chopped, thresholds)
+    assert ok is False
+    assert "truncated" in reason
+    complete = "Webisdom Digital Transformation and Technology Services"
+    assert looks_truncated(complete) is False
+    ok, _ = validate_title(complete, thresholds)
+    assert ok is True
+    assert looks_truncated("Digital transformation programs by Webisdom Inc") is False
     thresholds = load_settings().thresholds
     ok, _ = validate_title("short", thresholds)
     assert ok is False
@@ -129,3 +141,61 @@ def test_internal_link_suggestions():
 
 def test_flesch_score_runs():
     assert isinstance(flesch_reading_ease("This is a simple sentence. Another one follows!"), float)
+
+
+def test_llm_prompt_includes_failed_rules_and_length_examples():
+    from onpage_seo.llm.analyze import _failed_rule_summaries, _in_band_example, _system_prompt, _user_prompt
+
+    thresholds = load_settings().thresholds
+    title_ex = _in_band_example("short", thresholds.title_min, thresholds.title_max)
+    meta_ex = _in_band_example("short meta", thresholds.meta_min, thresholds.meta_max)
+    assert thresholds.title_min <= len(title_ex) <= thresholds.title_max
+    assert thresholds.meta_min <= len(meta_ex) <= thresholds.meta_max
+    assert not title_ex.endswith("hel")
+    assert " " in title_ex
+
+    system = _system_prompt(thresholds)
+    assert f"{thresholds.title_min}-{thresholds.title_max}" in system
+    assert f"{thresholds.meta_min}-{thresholds.meta_max}" in system
+    assert "rule_results" in system
+
+    report = {
+        "overall_score": 51,
+        "max_score": 100,
+        "rules": [
+            {"id": "title_length", "status": "warn", "detail": "title length 76 outside 50-60"},
+            {"id": "thin_content", "status": "pass", "detail": "ok"},
+        ],
+    }
+    failed = _failed_rule_summaries(report)
+    assert failed == [
+        {"id": "title_length", "status": "warn", "detail": "title length 76 outside 50-60"}
+    ]
+    user = _user_prompt(
+        {
+            "url": "https://webisdom.com/",
+            "title": "x" * 76,
+            "meta_description": "y" * 223,
+            "headers": {"h1": []},
+            "body_text": "hello",
+        },
+        report,
+        keywords=["digital transformation"],
+        thresholds=thresholds,
+        readability=50.0,
+        missing_alts=[],
+    )
+    assert '"title_chars": 76' in user
+    assert '"meta_chars": 223' in user
+    assert "title_length" in user
+    assert "thin_content" not in user
+
+
+def test_groq_env_names_load(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test_not_real")
+    monkeypatch.setenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    settings = load_settings()
+    assert settings.llm_api_key == "gsk_test_not_real"
+    assert "api.groq.com" in settings.llm_base_url
+    assert settings.llm_model == "llama-3.3-70b-versatile"

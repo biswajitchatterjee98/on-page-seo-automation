@@ -7,7 +7,12 @@ COPY config ./config
 COPY src ./src
 COPY dashboard ./dashboard
 
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir . \
+    && useradd --create-home --uid 10001 app \
+    && chown -R app:app /app
+# ponytail: Chromium not bundled; JS sites need a Playwright sidecar image.
+
+USER app
 
 ENV ONPAGE_SEO_THRESHOLDS_PATH=/app/config/thresholds.yaml
 

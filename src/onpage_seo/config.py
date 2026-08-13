@@ -88,9 +88,9 @@ class Settings:
     crawl_retries: int
     retry_backoff_sec: float
     llm_enabled: bool
-    openai_api_key: str | None
-    openai_base_url: str
-    openai_model: str
+    llm_api_key: str | None
+    llm_base_url: str
+    llm_model: str
     llm_max_calls_per_job: int
     llm_max_tokens: int
     internal_link_min_pages: int
@@ -112,12 +112,29 @@ def load_thresholds(path: Path | None = None) -> Thresholds:
     return Thresholds.from_dict(data)
 
 
+def _llm_credentials() -> tuple[str | None, str, str]:
+    """Groq env first; OPENAI_* kept for Ollama/Gemini-compatible endpoints."""
+    groq_key = (os.environ.get("GROQ_API_KEY") or "").strip() or None
+    if groq_key:
+        return (
+            groq_key,
+            os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+            os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        )
+    return (
+        os.environ.get("OPENAI_API_KEY") or None,
+        os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+        os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+    )
+
+
 def load_settings() -> Settings:
     thresholds_path = Path(
         os.environ.get("ONPAGE_SEO_THRESHOLDS_PATH", str(_DEFAULT_THRESHOLDS))
     )
     if not thresholds_path.is_absolute():
         thresholds_path = (_ROOT / thresholds_path).resolve()
+    key, base_url, model = _llm_credentials()
     return Settings(
         user_agent=os.environ.get(
             "ONPAGE_SEO_USER_AGENT",
@@ -134,9 +151,9 @@ def load_settings() -> Settings:
         crawl_retries=int(os.environ.get("ONPAGE_SEO_CRAWL_RETRIES", "3")),
         retry_backoff_sec=float(os.environ.get("ONPAGE_SEO_RETRY_BACKOFF_SEC", "0.5")),
         llm_enabled=os.environ.get("ONPAGE_SEO_LLM", "0") not in {"0", "false", "False"},
-        openai_api_key=os.environ.get("OPENAI_API_KEY") or None,
-        openai_base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-        openai_model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+        llm_api_key=key,
+        llm_base_url=base_url,
+        llm_model=model,
         llm_max_calls_per_job=int(os.environ.get("ONPAGE_SEO_LLM_MAX_CALLS_PER_JOB", "20")),
         llm_max_tokens=int(os.environ.get("ONPAGE_SEO_LLM_MAX_TOKENS", "800")),
         internal_link_min_pages=int(os.environ.get("ONPAGE_SEO_INTERNAL_LINK_MIN_PAGES", "3")),

@@ -63,3 +63,14 @@ def test_ssrf_blocks_localhost():
 
     with pytest.raises(SsrfBlockedError):
         assert_url_safe("http://127.0.0.1/")
+
+
+def test_homepage_skips_keyword_in_url():
+    thresholds = load_thresholds()
+    page = _sample_page()
+    page["url"] = "https://example.com/"
+    page["final_url"] = "https://example.com/"
+    checks = evaluate_page(page, ["espresso machines"], thresholds)
+    by_id = {item["id"]: item for item in checks}
+    assert by_id["keyword_in_url"]["status"] == "skip"
+    assert by_id["schema_presence"]["status"] == "pass"

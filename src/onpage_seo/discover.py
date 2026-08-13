@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 import requests
 
 from onpage_seo.config import Settings
+from onpage_seo.crawl.fetch import get_following_redirects
 from onpage_seo.security.ssrf import SsrfBlockedError, assert_url_safe
 
 
@@ -47,34 +48,27 @@ def fetch_sitemap_urls(
     if enforce_ssrf:
         assert_url_safe(sitemap_url)
 
-    response = requests.get(
-        sitemap_url,
-        timeout=settings.timeout_sec,
-        headers={"User-Agent": settings.user_agent},
+    html, _, status = get_following_redirects(
+        sitemap_url, settings, enforce_ssrf=enforce_ssrf
     )
-    response.raise_for_status()
-    pages, children = parse_sitemap_xml(response.text)
+    if status >= 400:
+        raise requests.HTTPError(f"HTTP {status} for sitemap {sitemap_url}")
+    pages, children = parse_sitemap_xml(html)
     collected = list(pages)
 
     # ponytail: one-level sitemap index only; upgrade: BFS with visited set
     for child in children:
         if len(collected) >= max_pages:
             break
-        if enforce_ssrf:
-            try:
-                assert_url_safe(child)
-            except SsrfBlockedError:
-                continue
         try:
-            child_resp = requests.get(
-                child,
-                timeout=settings.timeout_sec,
-                headers={"User-Agent": settings.user_agent},
+            child_html, _, child_status = get_following_redirects(
+                child, settings, enforce_ssrf=enforce_ssrf
             )
-            child_resp.raise_for_status()
-            child_pages, _ = parse_sitemap_xml(child_resp.text)
+            if child_status >= 400:
+                continue
+            child_pages, _ = parse_sitemap_xml(child_html)
             collected.extend(child_pages)
-        except requests.RequestException:
+        except (SsrfBlockedError, requests.RequestException):
             continue
 
     return dedupe_cap(collected, max_pages)

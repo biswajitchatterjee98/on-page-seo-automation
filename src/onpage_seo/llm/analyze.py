@@ -14,23 +14,139 @@ from onpage_seo.validate import partition_suggestions
 
 logger = logging.getLogger("onpage_seo")
 
-_SYSTEM = (
-    f"You are an on-page SEO assistant ({PROMPT_VERSION}). "
-    "Return ONLY valid JSON. Do not invent facts not supported by the page text. "
-    "Title suggestions must be 50-60 characters. Meta descriptions must be 150-160 characters."
-)
+
+def _usable_api_key(key: str | None) -> bool:
+    if not key:
+        return False
+    return key.strip().lower() not in {"none", "changeme", "gsk_your_groq_api_key"}
 
 
 def build_client(settings: Settings) -> LlmClient | None:
-    if not settings.llm_enabled or not settings.openai_api_key:
+    if not settings.llm_enabled or not _usable_api_key(settings.llm_api_key):
         return None
     return LlmClient(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url,
-        model=settings.openai_model,
+        api_key=settings.llm_api_key or "",
+        base_url=settings.llm_base_url,
+        model=settings.llm_model,
         max_tokens=settings.llm_max_tokens,
         timeout_sec=settings.timeout_sec,
         budget=LlmBudget(max_calls=settings.llm_max_calls_per_job),
+    )
+
+
+def _in_band_example(seed: str, minimum: int, maximum: int) -> str:
+    """Whole-word example inside [minimum, maximum]. Never mid-word slice."""
+    filler = [
+        "for",
+        "teams",
+        "across",
+        "India",
+        "with",
+        "clear",
+        "goals",
+        "and",
+        "trusted",
+        "delivery",
+    ]
+    parts = " ".join(seed.split()).split()
+    text = " ".join(parts)
+    index = 0
+    while len(text) < minimum:
+        parts.append(filler[index % len(filler)])
+        index += 1
+        text = " ".join(parts)
+        if len(text) > maximum:
+            parts.pop()
+            text = " ".join(parts)
+            break
+    while len(text) > maximum and parts:
+        parts.pop()
+        text = " ".join(parts)
+    if minimum <= len(text) <= maximum:
+        return text
+    for extra in (" 2026", " India", " now", " SEO"):
+        candidate = text + extra
+        if minimum <= len(candidate) <= maximum:
+            return candidate
+    return text
+
+
+def _failed_rule_summaries(report: dict[str, Any]) -> list[dict[str, str]]:
+    rows = []
+    for check in report.get("rules") or []:
+        status = str(check.get("status") or "")
+        if status not in {"fail", "warn"}:
+            continue
+        rows.append(
+            {
+                "id": str(check.get("id") or ""),
+                "status": status,
+                "detail": str(check.get("detail") or ""),
+            }
+        )
+    return rows
+
+
+def _system_prompt(thresholds: Thresholds) -> str:
+    title_ex = _in_band_example(
+        "Digital Transformation Consulting Services in India",
+        thresholds.title_min,
+        thresholds.title_max,
+    )
+    meta_ex = _in_band_example(
+        "Webisdom helps organizations with digital transformation, web, and SEO programs that improve visibility and community impact.",
+        thresholds.meta_min,
+        thresholds.meta_max,
+    )
+    return (
+        f"You are an on-page SEO assistant ({PROMPT_VERSION}). Return ONLY valid JSON. "
+        "Do not invent facts not supported by the page text. "
+        f"Each title MUST be {thresholds.title_min}-{thresholds.title_max} characters (count spaces). "
+        f"Each meta_description MUST be {thresholds.meta_min}-{thresholds.meta_max} characters (count spaces). "
+        "Every suggestion must end on a complete English word — never cut a word to hit the count. "
+        "Count before you output. If a draft is outside the band, rewrite with whole words. "
+        f"Example title ({len(title_ex)} chars): {title_ex!r}. "
+        f"Example meta ({len(meta_ex)} chars): {meta_ex!r}. "
+        "notes must agree with rule_results: never say a check passed or is in-range when status is fail or warn. "
+        "Alt text must describe the image; never use filler like 'background image' or 'mid section image'."
+    )
+
+
+def _user_prompt(
+    page: dict[str, Any],
+    report: dict[str, Any],
+    *,
+    keywords: list[str],
+    thresholds: Thresholds,
+    readability: float,
+    missing_alts: list[dict[str, Any]],
+) -> str:
+    title = str(page.get("title") or "")
+    meta = str(page.get("meta_description") or "")
+    payload = {
+        "url": page.get("final_url") or page.get("url"),
+        "keywords": keywords,
+        "title": title,
+        "title_chars": len(title),
+        "meta_description": meta,
+        "meta_chars": len(meta),
+        "h1": (page.get("headers") or {}).get("h1"),
+        "body_excerpt": str(page.get("body_text") or "")[:4000],
+        "missing_alt_images": missing_alts,
+        "flesch_reading_ease": readability,
+        "title_length_target": [thresholds.title_min, thresholds.title_max],
+        "meta_length_target": [thresholds.meta_min, thresholds.meta_max],
+        "overall_score": report.get("overall_score"),
+        "max_score": report.get("max_score"),
+        "rule_results": _failed_rule_summaries(report),
+    }
+    return (
+        "Analyze on-page SEO. Rules already ran; they own the score. "
+        "Return JSON keys: semantic_coverage_score (0-100), notes (string array), "
+        "title (1-3 strings in the title character band), "
+        "meta_description (1-3 strings in the meta character band), "
+        "alt_text (array of {src, suggested_alt}).\n"
+        + json.dumps(payload, ensure_ascii=False)
     )
 
 
@@ -79,29 +195,16 @@ def enrich_report_with_llm(
         if not str(img.get("alt") or "").strip()
     ][:5]
 
-    user_payload = {
-        "url": page.get("final_url") or page.get("url"),
-        "keywords": keywords,
-        "title": page.get("title"),
-        "meta_description": page.get("meta_description"),
-        "h1": (page.get("headers") or {}).get("h1"),
-        "body_excerpt": str(page.get("body_text") or "")[:4000],
-        "missing_alt_images": missing_alts,
-        "flesch_reading_ease": readability,
-        "title_length_target": [thresholds.title_min, thresholds.title_max],
-        "meta_length_target": [thresholds.meta_min, thresholds.meta_max],
-    }
-
     try:
         raw = client.chat_json(
-            system=_SYSTEM,
-            user=(
-                "Analyze on-page SEO for this page and return JSON with keys: "
-                "semantic_coverage_score (0-100), notes (string array), "
-                "title (string array of 1-3 suggestions), "
-                "meta_description (string array of 1-3 suggestions), "
-                "alt_text (array of {src, suggested_alt}).\n"
-                + json.dumps(user_payload, ensure_ascii=False)
+            system=_system_prompt(thresholds),
+            user=_user_prompt(
+                page,
+                report,
+                keywords=keywords,
+                thresholds=thresholds,
+                readability=readability,
+                missing_alts=missing_alts,
             ),
         )
         accepted, rejected = partition_suggestions(

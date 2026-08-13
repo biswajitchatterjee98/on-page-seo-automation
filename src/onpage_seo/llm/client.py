@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -11,7 +12,7 @@ import requests
 
 logger = logging.getLogger("onpage_seo")
 
-PROMPT_VERSION = "seo-llm-v1"
+PROMPT_VERSION = "seo-llm-v3"
 
 
 @dataclass
@@ -47,7 +48,7 @@ class LlmClient:
             raise RuntimeError("LLM call budget exhausted for this job")
         url = self.base_url.rstrip("/") + "/chat/completions"
         headers = {"Content-Type": "application/json"}
-        if self.api_key and self.api_key.strip() and self.api_key != "none":
+        if self.api_key.strip() and self.api_key != "none":
             headers["Authorization"] = f"Bearer {self.api_key}"
 
         payload: dict[str, Any] = {
@@ -59,26 +60,29 @@ class LlmClient:
                 {"role": "user", "content": user},
             ],
         }
-        # Include response_format for providers that support it
         if "ollama" not in self.base_url.lower():
             payload["response_format"] = {"type": "json_object"}
 
-        response = requests.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=self.timeout_sec,
-        )
+        response = self._post(url, headers, payload)
+        if response.status_code == 429:
+            time.sleep(1.0)
+            response = self._post(url, headers, payload)
         if response.status_code == 429:
             raise RuntimeError("LLM rate limited (429)")
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"].strip()
-        # Clean up markdown code blocks if present (common in local open models)
-        if content.startswith("```"):
-            lines = content.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            content = "\n".join(lines).strip()
-        return json.loads(content)
+        return json.loads(_strip_markdown_fence(content))
+
+    def _post(self, url: str, headers: dict[str, str], payload: dict[str, Any]):
+        return requests.post(url, headers=headers, json=payload, timeout=self.timeout_sec)
+
+
+def _strip_markdown_fence(content: str) -> str:
+    if not content.startswith("```"):
+        return content
+    lines = content.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].startswith("```"):
+        lines = lines[:-1]
+    return "\n".join(lines).strip()

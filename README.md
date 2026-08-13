@@ -2,7 +2,7 @@
 
 Crawl → deterministic rules → optional LLM suggestions → **human-approved CMS fixes** → history dashboard.
 
-**Current stage: P0–P4 complete** (see [ARCHITECTURE_AND_PLAN.md](./ARCHITECTURE_AND_PLAN.md)).
+**Current stage: features P0–P4 exist; not production-hardened** (see [ARCHITECTURE_AND_PLAN.md](./ARCHITECTURE_AND_PLAN.md)).
 
 Accepted LLM drafts are queued as `pending`. Rejected validations never enter the queue. Live apply re-crawls the URL and emits `alert_text` on score regression or `apply_failed`.
 
@@ -10,11 +10,9 @@ Accepted LLM drafts are queued as `pending`. Rejected validations never enter th
 
 | Phase | Status |
 |-------|--------|
-| P0 Core | Done |
-| P1 Pipeline / API / n8n | Done |
-| P2 LLM + validator | Done |
-| P3 Dashboard + trends | Done |
-| P4 CMS queue + approve + dry-run/apply + audit + post-fix verify | Done |
+| P0–P4 product loop | Implemented |
+| Production hardening | Partial (fail-closed Postgres, SSRF hops, API policy gates) |
+| Durable jobs / CI / WP meta apply | Not done |
 
 ## Quick start
 
@@ -26,7 +24,13 @@ cp .env.example .env
 pytest -q
 ```
 
-### Audit / batch / dashboard / API
+### LLM (Groq)
+
+Set `ONPAGE_SEO_LLM=1` and `GROQ_API_KEY` in `.env` (see `.env.example`). Never commit a real key.
+
+```bash
+onpage-seo audit --url https://example.com --keyword "example" --llm --out report.json
+```
 
 ```bash
 onpage-seo audit --url https://example.com --keyword "example" --llm --out report.json
