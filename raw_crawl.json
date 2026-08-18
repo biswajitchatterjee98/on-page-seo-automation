@@ -1,0 +1,7 @@
+{
+  "url": "https://example.com",
+  "status": "error",
+  "error_code": "empty_body",
+  "detail": "extracted fewer than 20 words",
+  "fetched_at": "2026-08-12T12:18:18Z"
+}

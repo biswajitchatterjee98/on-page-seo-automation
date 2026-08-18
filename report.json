@@ -1,0 +1,270 @@
+{
+  "job_id": "1e6c10e5-9494-45e2-b9a8-5bb73ea80961",
+  "url": "https://webisdom.com/",
+  "keywords": [
+    "digital transformation"
+  ],
+  "rules_version": "1.0.0",
+  "model_version": "llama-3.3-70b-versatile@seo-llm-v3",
+  "overall_score": 62,
+  "max_score": 100,
+  "status": "ok",
+  "rules": [
+    {
+      "id": "title_length",
+      "status": "warn",
+      "weight": 10,
+      "score": 5,
+      "detail": "title length 76 outside 50-60"
+    },
+    {
+      "id": "meta_description_length",
+      "status": "warn",
+      "weight": 10,
+      "score": 5,
+      "detail": "meta length 223 outside 150-160"
+    },
+    {
+      "id": "keyword_in_title",
+      "status": "pass",
+      "weight": 10,
+      "score": 10,
+      "detail": "keyword 'digital transformation' found"
+    },
+    {
+      "id": "keyword_in_h1",
+      "status": "fail",
+      "weight": 10,
+      "score": 0,
+      "detail": "keyword 'digital transformation' missing"
+    },
+    {
+      "id": "keyword_in_intro",
+      "status": "pass",
+      "weight": 8,
+      "score": 8,
+      "detail": "keyword 'digital transformation' found"
+    },
+    {
+      "id": "keyword_in_url",
+      "status": "skip",
+      "weight": 5,
+      "score": 5,
+      "detail": "homepage URL has no slug"
+    },
+    {
+      "id": "keyword_density",
+      "status": "warn",
+      "weight": 8,
+      "score": 4,
+      "detail": "density 0.1193% outside 0.5-2.5%"
+    },
+    {
+      "id": "image_alt",
+      "status": "fail",
+      "weight": 10,
+      "score": 0,
+      "detail": "23 image(s) missing alt text"
+    },
+    {
+      "id": "heading_hierarchy",
+      "status": "warn",
+      "weight": 8,
+      "score": 4,
+      "detail": "missing H1; skipped to H5 after H3"
+    },
+    {
+      "id": "thin_content",
+      "status": "pass",
+      "weight": 8,
+      "score": 8,
+      "detail": "word_count 4191 >= 300"
+    },
+    {
+      "id": "competitor_length",
+      "status": "skip",
+      "weight": 5,
+      "score": 5,
+      "detail": "no competitor sample"
+    },
+    {
+      "id": "schema_presence",
+      "status": "pass",
+      "weight": 4,
+      "score": 4,
+      "detail": "1 schema block(s)"
+    },
+    {
+      "id": "duplicate_title_meta",
+      "status": "skip",
+      "weight": 4,
+      "score": 4,
+      "detail": "single-page job"
+    }
+  ],
+  "competitor": {
+    "enabled": false,
+    "target_word_count": 4191,
+    "competitor_avg_word_count": 0.0,
+    "delta": 0
+  },
+  "llm": {
+    "status": "ok",
+    "semantic_coverage_score": 62,
+    "notes": [
+      "Flesch reading ease: 51.67",
+      "Title length is outside the target range of 50-60 characters",
+      "Meta description length is outside the target range of 150-160 characters",
+      "Keyword 'digital transformation' is missing from the H1 tag",
+      "Keyword density is outside the target range of 0.5-2.5%",
+      "23 images are missing alt text",
+      "Heading hierarchy is not properly structured, missing H1 and skipping to H5 after H3"
+    ],
+    "prompt_version": "seo-llm-v3",
+    "suggestions": {
+      "title": [],
+      "meta_description": [],
+      "alt_text": [
+        {
+          "src": "https://www.webisdom.com/include/images/webisdom-logo.png",
+          "suggested_alt": "Webisdom logo"
+        },
+        {
+          "src": "https://www.webisdom.com/include/images/webisdom-black.png",
+          "suggested_alt": "Webisdom black logo"
+        },
+        {
+          "src": "https://webisdom.com/include/images/mid.jpg",
+          "suggested_alt": "Mid section image"
+        },
+        {
+          "src": "https://webisdom.com/img/aws.jpg",
+          "suggested_alt": "AWS logo"
+        },
+        {
+          "src": "https://webisdom.com/img/microsoft.jpg",
+          "suggested_alt": "Microsoft logo"
+        }
+      ],
+      "internal_links": []
+    },
+    "rejected_suggestions": [
+      {
+        "field": "title",
+        "value": "Digital Transformation Services",
+        "reason": "title length 31 outside 50-60"
+      },
+      {
+        "field": "title",
+        "value": "Digital Consulting in India",
+        "reason": "title length 27 outside 50-60"
+      },
+      {
+        "field": "title",
+        "value": "Transformation Technology Services",
+        "reason": "title length 34 outside 50-60"
+      },
+      {
+        "field": "meta_description",
+        "value": "Webisdom helps organizations with digital transformation, web, and SEO programs that improve visibility and community impact",
+        "reason": "meta length 124 outside 150-160"
+      },
+      {
+        "field": "meta_description",
+        "value": "Digital transformation consulting services company in India, providing technology and consulting services for businesses",
+        "reason": "meta length 120 outside 150-160"
+      },
+      {
+        "field": "meta_description",
+        "value": "Webisdom offers digital transformation solutions, web development, and SEO services to improve online presence and community engagement",
+        "reason": "meta length 135 outside 150-160"
+      }
+    ]
+  },
+  "page": {
+    "title": "Digital Transformation, Technology & Consulting Services in India – Webisdom",
+    "meta_description": "Webisdom is one of the top Digital Transformation Consulting Services Company in India. We help businesses reimagine their business models, helping them thrive in disruptive environments and achieving competitive advantage.",
+    "word_count": 4191,
+    "keyword_density": {
+      "primary": 0.1193
+    },
+    "render_mode": "static",
+    "http_status": 200,
+    "canonical": "https://www.webisdom.com/",
+    "headers": {
+      "h1": [],
+      "h2": [
+        "Artificial Intelligence",
+        "Blockchain",
+        "Cyber Security",
+        "UI/UX Design",
+        "Internet of Things",
+        "Our Partner",
+        "Stronger Together:\r\n           Building Impact, Changing Lives",
+        "CASE STUDIES",
+        "1. What kind of organizations do you support?",
+        "2. How do your digital services help social causes?",
+        "3. Do you offer customized digital solutions?",
+        "4. How do you ensure accessibility and inclusivity in your work?",
+        "5. Can small or emerging nonprofits work with you?"
+      ],
+      "h3": [
+        "Webisdom",
+        "1000",
+        "2000",
+        "100",
+        "Services",
+        "Blog",
+        "Testimonials",
+        "Our Clients",
+        "FAQs"
+      ],
+      "h4": [],
+      "h5": [
+        "A Digital Transformation Initiative for Social Impact",
+        "We Empower Communities Through Digital Transformation",
+        "Web Development",
+        "Web Designing",
+        "Apps Development",
+        "Search Engine Optimization",
+        "Social Media Optimization",
+        "Graphic Designing",
+        "Latest news & post from our blog",
+        "An\r\n                                            Introduction to AI-as-a-service and Its Potential",
+        "Personalization\r\n                                            in Email Marketing: Best Practices and Strategies",
+        "The\r\n                                            Benefits of AI-as-a-Service for Businesses",
+        "The\r\n                                            Ethics of AI in Marketing: Best Practices and Guidelines 2023",
+        "The\r\n                                            Future of Marketing: Human and AI Collaboration",
+        "Quality Score\r\n                                            Adwords",
+        "See what our clients say about us",
+        "Frequently Asked Questions",
+        "Quick Links",
+        "Services",
+        "Terms And Policies"
+      ],
+      "h6": [
+        "Satisfied Clients",
+        "Completed Projects",
+        "Countries Served",
+        "Honda Oman",
+        "QUANTINSTI: \"Algorithmic Trading Institute\"",
+        "Toyota Oman",
+        "AUG 25th, 2023",
+        "AUG 25th, 2023",
+        "AUG 25th, 2023",
+        "AUG 22nd, 2023",
+        "AUG 22nd, 2023",
+        "DEC 2nd, 2019"
+      ]
+    },
+    "images_count": 104,
+    "schema_count": 1
+  },
+  "queued_suggestion_ids": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ]
+}

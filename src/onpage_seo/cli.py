@@ -300,10 +300,13 @@ def run_dashboard(args: argparse.Namespace) -> int:
     import sys
     from pathlib import Path
 
-    app_path = Path(__file__).resolve().parents[2] / "dashboard" / "app.py"
-    if not app_path.exists():
-        # installed package layout fallback
-        app_path = Path(__file__).resolve().parents[1] / "dashboard" / "app.py"
+    candidates = [
+        Path(__file__).resolve().parents[2] / "dashboard" / "app.py",
+        Path.cwd() / "dashboard" / "app.py",
+        Path("/app/dashboard/app.py"),
+        Path(__file__).resolve().parents[1] / "dashboard" / "app.py",
+    ]
+    app_path = next((p for p in candidates if p.exists()), candidates[0])
     cmd = [
         sys.executable,
         "-m",
@@ -387,6 +390,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "queue":
         raise SystemExit(run_queue(args))
     raise SystemExit(f"unknown command: {args.command}")
+
 
 
 if __name__ == "__main__":
