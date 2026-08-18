@@ -1,104 +1,90 @@
 # On-Page SEO Automation
 
-Production-oriented pipeline that crawls a page, scores it with deterministic on-page SEO rules, and emits a JSON report.
+Crawl → deterministic rules → optional LLM suggestions → **human-approved CMS fixes** → history dashboard.
 
-**Current stage: P0** — single-URL crawl + rule engine + CLI. LLM, n8n, dashboard, and CMS auto-fix come later (see [ARCHITECTURE_AND_PLAN.md](./ARCHITECTURE_AND_PLAN.md)).
+**Current stage: features P0–P4 exist; not production-hardened** (see [ARCHITECTURE_AND_PLAN.md](./ARCHITECTURE_AND_PLAN.md)).
 
-## What it checks
+Accepted LLM drafts are queued as `pending`. Rejected validations never enter the queue. Live apply re-crawls the URL and emits `alert_text` on score regression or `apply_failed`.
 
-Title / meta length, keyword presence (title, H1, intro, URL), keyword density, image alt text, heading hierarchy, thin content, optional competitor length, schema (when enabled), duplicate title/meta (multi-page jobs).
+## Status
+
+| Phase | Status |
+|-------|--------|
+| P0–P4 product loop | Implemented |
+| Production hardening | Partial (fail-closed Postgres, SSRF hops, API policy gates) |
+| Durable jobs / CI / WP meta apply | Not done |
 
 ## Quick start
 
 ```bash
 cd on-page-seo-automation
-python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env        # optional; defaults work for local use
-```
-
-### Run an audit
-
-```bash
-onpage-seo audit \
-  --url https://example.com \
-  --keyword "example" \
-  --out report.json
-```
-
-Useful flags:
-
-| Flag | Purpose |
-|------|---------|
-| `--keyword` | Repeatable; first keyword is primary |
-| `--render-mode auto\|static\|playwright` | Fetch strategy (default `auto`) |
-| `--competitor-word-count N` | Enable competitor length compare |
-| `--no-ssrf-guard` | Disable private-IP blocking (trusted URLs only) |
-| `--ignore-robots` | Skip `robots.txt` (use sparingly; audited) |
-| `--page-only` | Emit crawler JSON only (no rules) |
-| `--out PATH` | Write report to a file (also prints stdout) |
-
-Exit codes: `0` success, `2` crawl error (robots / timeout / SSRF / empty body / HTTP).
-
-### Playwright (JS-rendered pages)
-
-```bash
-pip install -e ".[playwright]"
-playwright install chromium
-onpage-seo audit --url https://example.com --render-mode playwright --keyword example
-```
-
-### Tests
-
-```bash
+cp .env.example .env
 pytest -q
 ```
 
-### Docker
+### LLM (Groq)
+
+Set `ONPAGE_SEO_LLM=1` and `GROQ_API_KEY` in `.env` (see `.env.example`). Never commit a real key.
 
 ```bash
-docker build -t onpage-seo .
-docker run --rm onpage-seo audit --url https://example.com --keyword example
+onpage-seo audit --url https://example.com --keyword "example" --llm --out report.json
 ```
 
-## Project layout
+```bash
+onpage-seo audit --url https://example.com --keyword "example" --llm --out report.json
+onpage-seo batch --url-file urls.txt --keyword "example" --out batch.json
+onpage-seo serve --port 8080
+onpage-seo dashboard --port 8501
+```
+
+### Suggestion queue (P4)
+
+```bash
+onpage-seo queue list --status pending
+onpage-seo queue approve 1 --actor biswajit
+onpage-seo queue apply 1 --actor biswajit --dry-run    # audit only
+onpage-seo queue apply 1 --actor biswajit --no-dry-run # live CMS (needs provider)
+onpage-seo queue reject 2 --actor biswajit --reason "off-brand"
+onpage-seo queue audit 1
+```
+
+API (Bearer `ONPAGE_SEO_API_TOKEN`):
+
+- `GET /suggestions?status=pending`
+- `POST /suggestions/{id}/approve`
+- `POST /suggestions/{id}/reject`
+- `POST /suggestions/{id}/apply` body: `{"actor":"…","dry_run":true}`
+
+**Guarantees:** only `approved` items can apply; dry-run writes audit without CMS mutation; failures → `apply_failed` + audit.
+
+### WordPress
+
+```bash
+export ONPAGE_SEO_CMS_PROVIDER=wordpress
+export WP_BASE_URL=https://yoursite.example
+export WP_USERNAME=...
+export WP_APP_PASSWORD=...
+export ONPAGE_SEO_CMS_DRY_RUN=0   # only after you trust dry-runs
+```
+
+P4 maps `title` → post/page title, `meta_description` → excerpt. Alt-text media apply is not implemented yet.
+
+### Docker Compose
+
+```bash
+docker compose up --build
+# API :8080 · Dashboard :8501 · n8n :5678
+```
+
+## Layout
 
 ```text
-config/thresholds.yaml     # rule weights and thresholds (no secrets)
 src/onpage_seo/
-  crawl/                   # fetch, robots, extract
-  rules/                   # versioned checklist + scoring
-  report/                  # combined JSON report
-  security/                # SSRF guard
-  cli.py                   # onpage-seo entrypoint
-tests/                     # rule + extract checks
-ARCHITECTURE_AND_PLAN.md   # full architecture and phase plan
+  queue.py          # enqueue accepted suggestions
+  cms/              # adapters + approve/reject/apply
+  storage/          # jobs, pages, reports, suggestions, audit_events
+  ...
+dashboard/app.py    # trends + approval UI
 ```
-
-## Configuration
-
-| Source | Examples |
-|--------|----------|
-| `config/thresholds.yaml` | Title/meta bounds, density band, weights, `rules_version` |
-| Env (see `.env.example`) | `ONPAGE_SEO_USER_AGENT`, timeouts, crawl delay, SSRF guard, thresholds path |
-
-Secrets stay in `.env` (gitignored). Do not commit real keys.
-
-## Report shape (P0)
-
-Successful audits include `job_id`, `rules_version`, `overall_score` / `max_score`, per-check `rules[]`, and `llm.status: "skipped"` until the LLM phase lands.
-
-Crawl failures return a typed error (`robots_disallowed`, `ssrf_blocked`, `timeout`, `http_error`, `empty_body`, …) with score `0`.
-
-## Roadmap
-
-| Phase | Status |
-|-------|--------|
-| P0 Core (crawl + rules + CLI) | Done |
-| P1 Multi-URL, Postgres, n8n | Planned |
-| P2 LLM suggestions (validated) | Planned |
-| P3 Dashboard | Planned |
-| P4 CMS auto-fix + human approval | Planned |
-
-Details, diagrams, and production guardrails: [ARCHITECTURE_AND_PLAN.md](./ARCHITECTURE_AND_PLAN.md).

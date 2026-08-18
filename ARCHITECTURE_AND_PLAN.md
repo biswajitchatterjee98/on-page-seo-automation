@@ -52,7 +52,7 @@ These are the Phase-1 decisions. Defaults below are production-sane; change only
 | First input mode | Single URL + URL list file | Sitemap crawl in P1 once single-URL path is stable |
 | Keyword source | Manual keywords per URL/job in config/JSON | GSC adapter later behind the same interface |
 | Primary CMS | WordPress REST API | Thin adapter interface so others can plug in |
-| LLM provider | One provider via env (`OPENAI_API_KEY` or equivalent) | Direct HTTP client first; LangChain only if it stays thin |
+| LLM provider | Groq via `GROQ_API_KEY` (OpenAI-compatible HTTP) | Direct HTTP client; `OPENAI_*` fallback for Ollama/Gemini |
 | Orchestration | n8n for schedule / webhook / Slack | Business logic stays in Python |
 | Storage | Postgres for production; SQLite allowed for local only | Same schema; driver switch via config |
 | Dashboard | Streamlit internal (auth-protected) | Read-only against DB |
@@ -606,10 +606,19 @@ flowchart TD
 
 ---
 
-## 15. Immediate Next Build Step
+## 15. Status
 
-> Implement **P0**: production-shaped crawler + versioned rule engine + CLI audit for one URL (robots, errors, weighted score, density, logs, tests, `.env.example`, Dockerfile).  
-> No n8n, no LLM, no CMS until that path is trusted on real pages.
+**P0–P4 product loop is implemented. Production hardening is partial — do not treat this as go-live.**
 
-That is the production foundation everything else hangs off.
+| Phase | Status |
+|-------|--------|
+| P0 Core | Implemented |
+| P1 Pipeline / API / n8n | Implemented |
+| P2 LLM + validator | Implemented |
+| P3 Dashboard + trends | Implemented |
+| P4 CMS queue + approve + dry-run/apply + audit + post-fix verify | Implemented |
+| Fail-closed Postgres, redirect SSRF, API policy gates | Implemented |
+| Durable worker, connection pool, CI, Playwright image, WP canonical apply | Not done |
+
+You can fill `.env` for **local** runs now (`GROQ_API_KEY`, dashboard password, optional `DATABASE_URL`). Keep `ONPAGE_SEO_CMS_DRY_RUN=1` until staging apply is trusted. Do not point live WordPress credentials at this stack until the remaining ops items above are done.
 ```

@@ -13,6 +13,29 @@ _ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_THRESHOLDS = _ROOT / "config" / "thresholds.yaml"
 
 
+def load_env_file(path: Path | None = None) -> None:
+    env_path = path or (_ROOT / ".env")
+    if not env_path.is_file():
+        return
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(env_path)
+    except ImportError:
+        with env_path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip("'\"")
+                if k not in os.environ:
+                    os.environ[k] = v
+
+
+load_env_file()
+
+
 @dataclass(frozen=True)
 class Thresholds:
     rules_version: str
@@ -59,6 +82,23 @@ class Settings:
     ssrf_guard: bool
     thresholds_path: Path
     thresholds: Thresholds
+    database_url: str | None
+    api_token: str | None
+    max_pages: int
+    crawl_retries: int
+    retry_backoff_sec: float
+    llm_enabled: bool
+    llm_api_key: str | None
+    llm_base_url: str
+    llm_model: str
+    llm_max_calls_per_job: int
+    llm_max_tokens: int
+    internal_link_min_pages: int
+    cms_provider: str
+    wp_base_url: str | None
+    wp_username: str | None
+    wp_app_password: str | None
+    cms_dry_run_default: bool
 
 
 def load_thresholds(path: Path | None = None) -> Thresholds:
@@ -72,12 +112,29 @@ def load_thresholds(path: Path | None = None) -> Thresholds:
     return Thresholds.from_dict(data)
 
 
+def _llm_credentials() -> tuple[str | None, str, str]:
+    """Groq env first; OPENAI_* kept for Ollama/Gemini-compatible endpoints."""
+    groq_key = (os.environ.get("GROQ_API_KEY") or "").strip() or None
+    if groq_key:
+        return (
+            groq_key,
+            os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+            os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        )
+    return (
+        os.environ.get("OPENAI_API_KEY") or None,
+        os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+        os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+    )
+
+
 def load_settings() -> Settings:
     thresholds_path = Path(
         os.environ.get("ONPAGE_SEO_THRESHOLDS_PATH", str(_DEFAULT_THRESHOLDS))
     )
     if not thresholds_path.is_absolute():
         thresholds_path = (_ROOT / thresholds_path).resolve()
+    key, base_url, model = _llm_credentials()
     return Settings(
         user_agent=os.environ.get(
             "ONPAGE_SEO_USER_AGENT",
@@ -88,4 +145,22 @@ def load_settings() -> Settings:
         ssrf_guard=os.environ.get("ONPAGE_SEO_SSRF_GUARD", "1") not in {"0", "false", "False"},
         thresholds_path=thresholds_path,
         thresholds=load_thresholds(thresholds_path),
+        database_url=os.environ.get("DATABASE_URL") or None,
+        api_token=os.environ.get("ONPAGE_SEO_API_TOKEN") or None,
+        max_pages=int(os.environ.get("ONPAGE_SEO_MAX_PAGES", "50")),
+        crawl_retries=int(os.environ.get("ONPAGE_SEO_CRAWL_RETRIES", "3")),
+        retry_backoff_sec=float(os.environ.get("ONPAGE_SEO_RETRY_BACKOFF_SEC", "0.5")),
+        llm_enabled=os.environ.get("ONPAGE_SEO_LLM", "0") not in {"0", "false", "False"},
+        llm_api_key=key,
+        llm_base_url=base_url,
+        llm_model=model,
+        llm_max_calls_per_job=int(os.environ.get("ONPAGE_SEO_LLM_MAX_CALLS_PER_JOB", "20")),
+        llm_max_tokens=int(os.environ.get("ONPAGE_SEO_LLM_MAX_TOKENS", "800")),
+        internal_link_min_pages=int(os.environ.get("ONPAGE_SEO_INTERNAL_LINK_MIN_PAGES", "3")),
+        cms_provider=os.environ.get("ONPAGE_SEO_CMS_PROVIDER", "null"),
+        wp_base_url=os.environ.get("WP_BASE_URL") or None,
+        wp_username=os.environ.get("WP_USERNAME") or None,
+        wp_app_password=os.environ.get("WP_APP_PASSWORD") or None,
+        cms_dry_run_default=os.environ.get("ONPAGE_SEO_CMS_DRY_RUN", "1")
+        not in {"0", "false", "False"},
     )

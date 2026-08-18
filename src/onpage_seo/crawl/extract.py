@@ -9,7 +9,7 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup, NavigableString
 
-_SCRIPT_STYLE = {"script", "style", "noscript", "template"}
+_SKIP_TEXT = {"script", "style", "noscript", "template", "nav", "footer", "header", "aside"}
 
 
 def _visible_text(soup: BeautifulSoup) -> str:
@@ -18,7 +18,14 @@ def _visible_text(soup: BeautifulSoup) -> str:
     for element in root.descendants:
         if isinstance(element, NavigableString):
             parent = element.parent
-            if parent and parent.name in _SCRIPT_STYLE:
+            node = parent
+            skipped = False
+            while node is not None:
+                if getattr(node, "name", None) in _SKIP_TEXT:
+                    skipped = True
+                    break
+                node = getattr(node, "parent", None)
+            if skipped:
                 continue
             text = str(element).strip()
             if text:

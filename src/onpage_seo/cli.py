@@ -1,4 +1,4 @@
-"""CLI: onpage-seo audit — P0 end-to-end crawl + rules report."""
+"""CLI: onpage-seo audit | batch | serve."""
 
 from __future__ import annotations
 
@@ -11,40 +11,73 @@ from pathlib import Path
 from onpage_seo.config import load_settings
 from onpage_seo.crawl import crawl_url
 from onpage_seo.logutil import configure_logging, stage_timer
-from onpage_seo.report import build_report
+from onpage_seo.pipeline import JobConfig, run_job
+from onpage_seo.report.html import render_batch_html
+from onpage_seo.storage import open_store
 
 
-def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        prog="onpage-seo",
-        description="On-page SEO automation (P0: crawl + rule score → JSON report)",
-    )
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    audit = sub.add_parser("audit", help="Crawl one URL and score with the rule engine")
-    audit.add_argument("--url", required=True, help="Page URL to audit")
-    audit.add_argument(
+def _add_shared_crawl_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
         "--keyword",
         action="append",
         default=[],
         help="Target keyword (repeatable). First keyword is primary.",
     )
-    audit.add_argument(
+    parser.add_argument(
         "--render-mode",
         choices=("auto", "static", "playwright"),
         default="auto",
         help="HTML fetch strategy (default: auto)",
     )
-    audit.add_argument(
+    parser.add_argument(
         "--ignore-robots",
         action="store_true",
         help="Do not honor robots.txt (audited use only)",
     )
-    audit.add_argument(
+    parser.add_argument(
         "--no-ssrf-guard",
         action="store_true",
         help="Disable SSRF IP checks (local fixtures / trusted URLs only)",
     )
+    parser.add_argument(
+        "--job-id",
+        default=None,
+        help="Optional job id (default: generated UUID)",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Write JSON output to this path (also prints to stdout)",
+    )
+    parser.add_argument(
+        "--html-out",
+        type=Path,
+        default=None,
+        help="Write optional HTML summary to this path",
+    )
+    parser.add_argument(
+        "--llm",
+        action="store_true",
+        help="Enable LLM enrichment for this run (requires GROQ_API_KEY)",
+    )
+    parser.add_argument(
+        "--rules-only",
+        action="store_true",
+        help="Force rules-only mode (skip LLM even if ONPAGE_SEO_LLM=1)",
+    )
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="onpage-seo",
+        description="On-page SEO automation (P4: crawl → rules → LLM → queue → CMS apply)",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    audit = sub.add_parser("audit", help="Crawl one URL and score with the rule engine")
+    audit.add_argument("--url", required=True, help="Page URL to audit")
+    _add_shared_crawl_flags(audit)
     audit.add_argument(
         "--competitor-word-count",
         type=float,
@@ -52,22 +85,91 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Optional competitor average word count for length compare",
     )
     audit.add_argument(
-        "--job-id",
-        default=None,
-        help="Optional job id (default: generated UUID)",
-    )
-    audit.add_argument(
-        "--out",
-        type=Path,
-        default=None,
-        help="Write report JSON to this path (also prints to stdout)",
-    )
-    audit.add_argument(
         "--page-only",
         action="store_true",
         help="Emit crawler page JSON only (skip rules)",
     )
+
+    batch = sub.add_parser("batch", help="Audit many URLs (list file and/or sitemap)")
+    batch.add_argument("--url", action="append", default=[], help="Target URL (repeatable)")
+    batch.add_argument("--url-file", type=Path, default=None, help="Text file of URLs, one per line")
+    batch.add_argument("--sitemap-url", default=None, help="Sitemap or sitemap index URL")
+    batch.add_argument(
+        "--competitor-url",
+        action="append",
+        default=[],
+        help="Competitor URL to crawl for average word count (repeatable)",
+    )
+    batch.add_argument(
+        "--competitor-word-count",
+        type=float,
+        default=None,
+        help="Skip competitor crawls; use this average directly",
+    )
+    batch.add_argument("--max-pages", type=int, default=None, help="Cap pages per job")
+    batch.add_argument("--fail-fast", action="store_true", help="Stop after first crawl error")
+    batch.add_argument(
+        "--no-reuse",
+        action="store_true",
+        help="Do not reuse a prior completed job with the same config hash",
+    )
+    _add_shared_crawl_flags(batch)
+
+    serve = sub.add_parser("serve", help="Run the Job API (FastAPI/uvicorn)")
+    serve.add_argument("--host", default="0.0.0.0")
+    serve.add_argument("--port", type=int, default=8080)
+
+    dash = sub.add_parser("dashboard", help="Run the Streamlit trend dashboard")
+    dash.add_argument("--port", type=int, default=8501)
+    dash.add_argument("--host", default="0.0.0.0")
+
+    queue = sub.add_parser("queue", help="Manage CMS suggestion approval queue")
+    queue_sub = queue.add_subparsers(dest="queue_command", required=True)
+    q_list = queue_sub.add_parser("list", help="List suggestions")
+    q_list.add_argument("--status", default="pending")
+    q_list.add_argument("--job-id", default=None)
+    q_list.add_argument("--out", type=Path, default=None)
+
+    q_approve = queue_sub.add_parser("approve", help="Approve a pending suggestion")
+    q_approve.add_argument("suggestion_id", type=int)
+    q_approve.add_argument("--actor", default="cli")
+
+    q_reject = queue_sub.add_parser("reject", help="Reject a suggestion")
+    q_reject.add_argument("suggestion_id", type=int)
+    q_reject.add_argument("--actor", default="cli")
+    q_reject.add_argument("--reason", default="")
+
+    q_apply = queue_sub.add_parser("apply", help="Apply an approved suggestion to CMS")
+    q_apply.add_argument("suggestion_id", type=int)
+    q_apply.add_argument("--actor", default="cli")
+    q_apply.add_argument("--dry-run", action="store_true", help="Audit only; do not mutate CMS")
+    q_apply.add_argument(
+        "--no-dry-run",
+        action="store_true",
+        help="Force live CMS apply (overrides ONPAGE_SEO_CMS_DRY_RUN default)",
+    )
+
+    q_audit = queue_sub.add_parser("audit", help="Show audit trail for a suggestion")
+    q_audit.add_argument("suggestion_id", type=int)
+
     return parser.parse_args(argv)
+
+
+def _llm_flag(args: argparse.Namespace) -> bool | None:
+    if args.rules_only:
+        return False
+    if args.llm:
+        return True
+    return None
+
+
+def _write_out(payload: object, out: Path | None) -> None:
+    text = json.dumps(payload, indent=2, ensure_ascii=False)
+    print(text)
+    if out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text + "\n", encoding="utf-8")
+        print(f"Wrote {out.resolve()}", file=sys.stderr)
 
 
 def run_audit(args: argparse.Namespace) -> int:
@@ -82,51 +184,55 @@ def run_audit(args: argparse.Namespace) -> int:
         extra={"job_id": job_id, "url": url, "stage": "start", "status": "ok"},
     )
 
-    with stage_timer(logger, job_id=job_id, url=url, stage="crawl"):
-        page = crawl_url(
-            url,
-            settings,
-            primary_keyword=keywords[0] if keywords else None,
-            render_mode=args.render_mode,
-            enforce_ssrf=not args.no_ssrf_guard,
-            ignore_robots=args.ignore_robots,
-        )
-
     if args.page_only:
-        payload = page
-    else:
-        with stage_timer(logger, job_id=job_id, url=url, stage="rules"):
-            payload = build_report(
-                job_id=job_id,
-                page=page,
-                keywords=keywords,
-                thresholds=settings.thresholds,
-                competitor_avg_word_count=args.competitor_word_count,
+        with stage_timer(logger, job_id=job_id, url=url, stage="crawl"):
+            page = crawl_url(
+                url,
+                settings,
+                primary_keyword=keywords[0] if keywords else None,
+                render_mode=args.render_mode,
+                enforce_ssrf=not args.no_ssrf_guard,
+                ignore_robots=args.ignore_robots,
             )
+        _write_out(page, args.out)
+        return 2 if page.get("status") == "error" else 0
 
-    text = json.dumps(payload, indent=2, ensure_ascii=False)
-    print(text)
-    if args.out:
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(text + "\n", encoding="utf-8")
+    # Same path as batch/API: persist + enqueue accepted suggestions
+    config = JobConfig(
+        urls=[url],
+        keywords=keywords,
+        competitor_word_count=args.competitor_word_count,
+        render_mode=args.render_mode,
+        ignore_robots=args.ignore_robots,
+        enforce_ssrf=not args.no_ssrf_guard,
+        reuse_completed=False,
+        enable_llm=_llm_flag(args),
+    )
+    store = open_store(settings.database_url)
+    summary = run_job(config, settings, store=store, job_id=job_id)
+    reports = summary.get("reports") or []
+    payload = reports[0] if len(reports) == 1 else summary
+    _write_out(payload, args.out)
+    if args.html_out and reports:
+        args.html_out.parent.mkdir(parents=True, exist_ok=True)
+        from onpage_seo.report.html import render_report_html
 
-    if page.get("status") == "error":
-        logger.info(
-            "audit finished with crawl error",
-            extra={
-                "job_id": job_id,
-                "url": url,
-                "stage": "done",
-                "status": "error",
-                "error_code": page.get("error_code"),
-            },
-        )
-        return 2
+        args.html_out.write_text(render_report_html(reports[0]), encoding="utf-8")
 
+    status = summary.get("status")
     logger.info(
         "audit finished",
-        extra={"job_id": job_id, "url": url, "stage": "done", "status": "ok"},
+        extra={
+            "job_id": job_id,
+            "url": url,
+            "stage": "done",
+            "status": "ok" if status != "failed" else "error",
+        },
     )
+    if status == "failed":
+        return 2
+    if status == "completed_with_errors":
+        return 1
     return 0
 
 

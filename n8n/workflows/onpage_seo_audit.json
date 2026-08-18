@@ -4,22 +4,14 @@
     {
       "parameters": {
         "rule": {
-          "interval": [
-            {
-              "field": "hours",
-              "hoursInterval": 24
-            }
-          ]
+          "interval": [{ "field": "hours", "hoursInterval": 24 }]
         }
       },
       "id": "schedule",
       "name": "Daily Schedule",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        0,
-        0
-      ]
+      "position": [0, 0]
     },
     {
       "parameters": {},
@@ -27,10 +19,7 @@
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [
-        0,
-        200
-      ]
+      "position": [0, 200]
     },
     {
       "parameters": {
@@ -43,10 +32,7 @@
       "name": "CMS Publish Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        0,
-        400
-      ],
+      "position": [0, 400],
       "webhookId": "onpage-seo-audit"
     },
     {
@@ -71,10 +57,7 @@
       "name": "Create SEO Job",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        280,
-        100
-      ]
+      "position": [280, 100]
     },
     {
       "parameters": {
@@ -95,10 +78,7 @@
       "name": "Fetch Slack Summary",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        520,
-        100
-      ]
+      "position": [520, 100]
     },
     {
       "parameters": {
@@ -119,10 +99,7 @@
       "name": "List Pending Suggestions",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        520,
-        280
-      ],
+      "position": [520, 280],
       "notesInFlow": true,
       "notes": "Human approval happens in dashboard/CLI. Apply only approved items; dry-run first."
     },
@@ -141,74 +118,31 @@
       "name": "Slack Notify",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [
-        760,
-        100
-      ],
+      "position": [760, 100],
       "notesInFlow": true,
       "notes": "Configure Slack credentials. Never auto-apply without human approve."
     }
   ],
   "connections": {
     "Daily Schedule": {
-      "main": [
-        [
-          {
-            "node": "Create SEO Job",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Create SEO Job", "type": "main", "index": 0 }]]
     },
     "Manual Trigger": {
-      "main": [
-        [
-          {
-            "node": "Create SEO Job",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Create SEO Job", "type": "main", "index": 0 }]]
     },
     "CMS Publish Webhook": {
-      "main": [
-        [
-          {
-            "node": "Create SEO Job",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Create SEO Job", "type": "main", "index": 0 }]]
     },
     "Create SEO Job": {
       "main": [
         [
-          {
-            "node": "Fetch Slack Summary",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "List Pending Suggestions",
-            "type": "main",
-            "index": 0
-          }
+          { "node": "Fetch Slack Summary", "type": "main", "index": 0 },
+          { "node": "List Pending Suggestions", "type": "main", "index": 0 }
         ]
       ]
     },
     "Fetch Slack Summary": {
-      "main": [
-        [
-          {
-            "node": "Slack Notify",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Slack Notify", "type": "main", "index": 0 }]]
     }
   },
   "meta": {

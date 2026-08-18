@@ -151,7 +151,19 @@ def evaluate_page(
     intro_words = re.findall(r"[A-Za-z0-9']+", body.lower())[: thresholds.intro_word_count]
     intro = " ".join(intro_words)
     keyword_check("keyword_in_intro", "keyword_in_intro", intro, required=True)
-    keyword_check("keyword_in_url", "keyword_in_url", _slug(url).replace("-", " "), required=False)
+    slug = _slug(url).replace("-", " ")
+    if not slug:
+        checks.append(
+            _result(
+                "keyword_in_url",
+                "skip",
+                weights.get("keyword_in_url", 5),
+                "homepage URL has no slug",
+                warn_ratio=warn_ratio,
+            )
+        )
+    else:
+        keyword_check("keyword_in_url", "keyword_in_url", slug, required=False)
 
     # keyword_density
     w = weights.get("keyword_density", 8)
@@ -270,14 +282,12 @@ def evaluate_page(
 
     # schema_presence
     w = weights.get("schema_presence", 4)
-    if not thresholds.expect_schema:
-        checks.append(
-            _result("schema_presence", "skip", w, "expect_schema=false", warn_ratio=warn_ratio)
-        )
-    elif schema:
+    if schema:
         checks.append(_result("schema_presence", "pass", w, f"{len(schema)} schema block(s)", warn_ratio=warn_ratio))
-    else:
+    elif thresholds.expect_schema:
         checks.append(_result("schema_presence", "warn", w, "no JSON-LD schema found", warn_ratio=warn_ratio))
+    else:
+        checks.append(_result("schema_presence", "skip", w, "no schema and expect_schema=false", warn_ratio=warn_ratio))
 
     # duplicate_title_meta
     w = weights.get("duplicate_title_meta", 4)

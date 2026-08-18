@@ -9,3 +9,8 @@ dist/
 *.egg-info/
 .mypy_cache/
 playwright-report/
+*.db
+report.json
+ai_report.json
+competitor_report.json
+raw_crawl.json
