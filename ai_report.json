@@ -1,0 +1,222 @@
+{
+  "job_id": "0f3e344c-d06a-4293-96ab-15bab97de974",
+  "url": "https://smallbusinessbonfire.com/",
+  "keywords": [
+    "self improvement"
+  ],
+  "rules_version": "1.0.0",
+  "model_version": "llama-3.3-70b-versatile@seo-llm-v3",
+  "overall_score": 52,
+  "max_score": 100,
+  "status": "ok",
+  "rules": [
+    {
+      "id": "title_length",
+      "status": "warn",
+      "weight": 10,
+      "score": 5,
+      "detail": "title length 22 outside 50-60"
+    },
+    {
+      "id": "meta_description_length",
+      "status": "warn",
+      "weight": 10,
+      "score": 5,
+      "detail": "meta length 83 outside 150-160"
+    },
+    {
+      "id": "keyword_in_title",
+      "status": "fail",
+      "weight": 10,
+      "score": 0,
+      "detail": "keyword 'self improvement' missing"
+    },
+    {
+      "id": "keyword_in_h1",
+      "status": "fail",
+      "weight": 10,
+      "score": 0,
+      "detail": "keyword 'self improvement' missing"
+    },
+    {
+      "id": "keyword_in_intro",
+      "status": "pass",
+      "weight": 8,
+      "score": 8,
+      "detail": "keyword 'self improvement' found"
+    },
+    {
+      "id": "keyword_in_url",
+      "status": "skip",
+      "weight": 5,
+      "score": 5,
+      "detail": "homepage URL has no slug"
+    },
+    {
+      "id": "keyword_density",
+      "status": "warn",
+      "weight": 8,
+      "score": 4,
+      "detail": "density 0.4149% outside 0.5-2.5%"
+    },
+    {
+      "id": "image_alt",
+      "status": "fail",
+      "weight": 10,
+      "score": 0,
+      "detail": "18 image(s) missing alt text"
+    },
+    {
+      "id": "heading_hierarchy",
+      "status": "warn",
+      "weight": 8,
+      "score": 4,
+      "detail": "skipped to H4 after H2"
+    },
+    {
+      "id": "thin_content",
+      "status": "pass",
+      "weight": 8,
+      "score": 8,
+      "detail": "word_count 723 >= 300"
+    },
+    {
+      "id": "competitor_length",
+      "status": "skip",
+      "weight": 5,
+      "score": 5,
+      "detail": "no competitor sample"
+    },
+    {
+      "id": "schema_presence",
+      "status": "pass",
+      "weight": 4,
+      "score": 4,
+      "detail": "1 schema block(s)"
+    },
+    {
+      "id": "duplicate_title_meta",
+      "status": "skip",
+      "weight": 4,
+      "score": 4,
+      "detail": "single-page job"
+    }
+  ],
+  "competitor": {
+    "enabled": false,
+    "target_word_count": 723,
+    "competitor_avg_word_count": 0.0,
+    "delta": 0
+  },
+  "llm": {
+    "status": "ok",
+    "semantic_coverage_score": 52,
+    "notes": [
+      "Flesch reading ease: 45.8",
+      "Title does not contain the target keyword 'self improvement'.",
+      "Meta description is too short and does not contain the target keyword.",
+      "Keyword density is below the recommended range.",
+      "Multiple images are missing alt text."
+    ],
+    "prompt_version": "seo-llm-v3",
+    "suggestions": {
+      "title": [],
+      "meta_description": [
+        "Explore the power of self improvement for small business owners, with resources and guidance on mindfulness, emotional intelligence, and intentional living."
+      ],
+      "alt_text": [
+        {
+          "src": "https://smallbusinessbonfire.com/wp-content/uploads/2022/10/Logo.svg",
+          "suggested_alt": "Small Business Bonfire logo"
+        },
+        {
+          "src": "https://smallbusinessbonfire.com/wp-content/uploads/2024/09/Hack-Spirit-Hero-2.png",
+          "suggested_alt": "Hero image for self improvement and mindfulness"
+        },
+        {
+          "src": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='683'%20height='648'%20viewBox='0%200%20683%20648'%3E%3C/svg%3E",
+          "suggested_alt": "Background image for self improvement section"
+        },
+        {
+          "src": "https://smallbusinessbonfire.com/wp-content/uploads/2024/09/smallbusinessbonfire-hero.png",
+          "suggested_alt": "Hero image for Small Business Bonfire website"
+        },
+        {
+          "src": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='428'%20height='127'%20viewBox='0%200%20428%20127'%3E%3C/svg%3E",
+          "suggested_alt": "Decorative image for self improvement article"
+        }
+      ],
+      "internal_links": []
+    },
+    "rejected_suggestions": [
+      {
+        "field": "title",
+        "value": "Self Improvement for Small Business Owners",
+        "reason": "title length 42 outside 50-60"
+      },
+      {
+        "field": "title",
+        "value": "Small Business Growth through Self Improvement",
+        "reason": "title length 46 outside 50-60"
+      },
+      {
+        "field": "title",
+        "value": "Practical Self Improvement for Entrepreneurs",
+        "reason": "title length 44 outside 50-60"
+      },
+      {
+        "field": "meta_description",
+        "value": "Discover how self improvement can transform your small business, with practical tips and actionable strategies for personal and professional growth.",
+        "reason": "meta length 148 outside 150-160"
+      },
+      {
+        "field": "meta_description",
+        "value": "Learn how to cultivate a mindset for success, with self improvement techniques and insights from experienced entrepreneurs and thought leaders.",
+        "reason": "meta length 143 outside 150-160"
+      }
+    ]
+  },
+  "page": {
+    "title": "Small Business Bonfire",
+    "meta_description": "Your authoritative guide to improving your mindset in order to scale your business.",
+    "word_count": 723,
+    "keyword_density": {
+      "primary": 0.4149
+    },
+    "render_mode": "static",
+    "http_status": 200,
+    "canonical": "https://smallbusinessbonfire.com/",
+    "headers": {
+      "h1": [
+        "Ignite Your Life with Practical Psychology and Actionable Self-improvement"
+      ],
+      "h2": [
+        "A Personal Message from Lachlan Brown",
+        "Introducing My Best-Selling Book: Hidden Secrets of Buddhism",
+        "What readers think of Hidden Secrets of Buddhism",
+        "Join Us on This Journey"
+      ],
+      "h3": [],
+      "h4": [
+        "Founder and Best-Selling Author"
+      ],
+      "h5": [
+        "Company Info",
+        "Resources",
+        "Customer Service",
+        "Follow Us"
+      ],
+      "h6": []
+    },
+    "images_count": 26,
+    "schema_count": 1
+  },
+  "queued_suggestion_ids": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ]
+}

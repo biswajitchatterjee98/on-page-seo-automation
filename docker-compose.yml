@@ -1,0 +1,84 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: onpage
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onpage}
+      POSTGRES_DB: onpage_seo
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onpage -d onpage_seo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    command: ["serve", "--host", "0.0.0.0", "--port", "8080"]
+    environment:
+      DATABASE_URL: postgresql://onpage:${POSTGRES_PASSWORD:-onpage}@db:5432/onpage_seo
+      ONPAGE_SEO_API_TOKEN: ${ONPAGE_SEO_API_TOKEN:-dev-token-change-me}
+      ONPAGE_SEO_SSRF_GUARD: "1"
+      ONPAGE_SEO_THRESHOLDS_PATH: /app/config/thresholds.yaml
+      ONPAGE_SEO_CRAWL_DELAY_SEC: "0.5"
+      ONPAGE_SEO_LLM: ${ONPAGE_SEO_LLM:-0}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      ONPAGE_SEO_LLM_MAX_TOKENS: ${ONPAGE_SEO_LLM_MAX_TOKENS:-2500}
+      ONPAGE_SEO_CMS_DRY_RUN: ${ONPAGE_SEO_CMS_DRY_RUN:-1}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  dashboard:
+    build: .
+    restart: unless-stopped
+    command: ["dashboard", "--host", "0.0.0.0", "--port", "8501"]
+    environment:
+      DATABASE_URL: postgresql://onpage:${POSTGRES_PASSWORD:-onpage}@db:5432/onpage_seo
+      DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-change-me}
+      ONPAGE_SEO_THRESHOLDS_PATH: /app/config/thresholds.yaml
+      ONPAGE_SEO_REGRESSION_POINTS: ${ONPAGE_SEO_REGRESSION_POINTS:-5}
+      ONPAGE_SEO_CMS_DRY_RUN: ${ONPAGE_SEO_CMS_DRY_RUN:-1}
+      ONPAGE_SEO_CMS_PROVIDER: ${ONPAGE_SEO_CMS_PROVIDER:-null}
+      WP_BASE_URL: ${WP_BASE_URL:-}
+      WP_USERNAME: ${WP_USERNAME:-}
+      WP_APP_PASSWORD: ${WP_APP_PASSWORD:-}
+    ports:
+      - "8501:8501"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  n8n:
+    image: n8nio/n8n:1.107.4
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: Asia/Kolkata
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-change-me}
+      ONPAGE_SEO_API_TOKEN: ${ONPAGE_SEO_API_TOKEN:-dev-token-change-me}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  n8n_data:

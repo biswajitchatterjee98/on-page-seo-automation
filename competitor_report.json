@@ -1,0 +1,165 @@
+{
+  "job_id": "471db9f4-3e5a-449c-b257-8fb14ac0ce51",
+  "url": "https://www.python.org/",
+  "keywords": [
+    "python"
+  ],
+  "rules_version": "1.0.0",
+  "model_version": null,
+  "overall_score": 66,
+  "max_score": 100,
+  "status": "ok",
+  "rules": [
+    {
+      "id": "title_length",
+      "status": "warn",
+      "weight": 10,
+      "score": 5,
+      "detail": "title length 21 outside 50-60"
+    },
+    {
+      "id": "meta_description_length",
+      "status": "warn",
+      "weight": 10,
+      "score": 5,
+      "detail": "meta length 52 outside 150-160"
+    },
+    {
+      "id": "keyword_in_title",
+      "status": "pass",
+      "weight": 10,
+      "score": 10,
+      "detail": "keyword 'python' found"
+    },
+    {
+      "id": "keyword_in_h1",
+      "status": "fail",
+      "weight": 10,
+      "score": 0,
+      "detail": "keyword 'python' missing"
+    },
+    {
+      "id": "keyword_in_intro",
+      "status": "pass",
+      "weight": 8,
+      "score": 8,
+      "detail": "keyword 'python' found"
+    },
+    {
+      "id": "keyword_in_url",
+      "status": "warn",
+      "weight": 5,
+      "score": 2,
+      "detail": "keyword 'python' missing"
+    },
+    {
+      "id": "keyword_density",
+      "status": "warn",
+      "weight": 8,
+      "score": 4,
+      "detail": "density 5.3421% outside 0.5-2.5%"
+    },
+    {
+      "id": "image_alt",
+      "status": "pass",
+      "weight": 10,
+      "score": 10,
+      "detail": "all images have alt text"
+    },
+    {
+      "id": "heading_hierarchy",
+      "status": "warn",
+      "weight": 8,
+      "score": 4,
+      "detail": "multiple H1 (5)"
+    },
+    {
+      "id": "thin_content",
+      "status": "pass",
+      "weight": 8,
+      "score": 8,
+      "detail": "word_count 1067 >= 300"
+    },
+    {
+      "id": "competitor_length",
+      "status": "warn",
+      "weight": 5,
+      "score": 2,
+      "detail": "word_count 1067 < 1200 vs competitors"
+    },
+    {
+      "id": "schema_presence",
+      "status": "skip",
+      "weight": 4,
+      "score": 4,
+      "detail": "expect_schema=false"
+    },
+    {
+      "id": "duplicate_title_meta",
+      "status": "skip",
+      "weight": 4,
+      "score": 4,
+      "detail": "single-page job"
+    }
+  ],
+  "competitor": {
+    "enabled": true,
+    "target_word_count": 1067,
+    "competitor_avg_word_count": 1500.0,
+    "delta": -433.0
+  },
+  "llm": {
+    "status": "skipped",
+    "semantic_coverage_score": 0,
+    "notes": [
+      "Flesch reading ease: 45.13",
+      "LLM disabled or API key missing"
+    ],
+    "prompt_version": "seo-llm-v1",
+    "suggestions": {
+      "title": [],
+      "meta_description": [],
+      "alt_text": [],
+      "internal_links": []
+    },
+    "rejected_suggestions": []
+  },
+  "page": {
+    "title": "Welcome to Python.org",
+    "meta_description": "The official home of the Python Programming Language",
+    "word_count": 1067,
+    "keyword_density": {
+      "primary": 5.3421
+    },
+    "render_mode": "static",
+    "http_status": 200,
+    "canonical": "",
+    "headers": {
+      "h1": [
+        "Intuitive Interpretation",
+        "Compound Data Types",
+        "All the Flow You’d Expect",
+        "Functions Defined",
+        "Quick & Easy to Learn"
+      ],
+      "h2": [
+        "Get Started",
+        "Download",
+        "Docs",
+        "Jobs",
+        "Latest News",
+        "Upcoming Events",
+        "Success Stories",
+        "Use Python for…",
+        ">>> Python Software Foundation"
+      ],
+      "h3": [],
+      "h4": [],
+      "h5": [],
+      "h6": []
+    },
+    "images_count": 1,
+    "schema_count": 1
+  },
+  "queued_suggestion_ids": []
+}

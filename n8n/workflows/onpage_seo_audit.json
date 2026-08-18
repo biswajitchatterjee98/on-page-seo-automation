@@ -1,0 +1,220 @@
+{
+  "name": "On-Page SEO Audit",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "onpage-seo-audit",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "CMS Publish Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        400
+      ],
+      "webhookId": "onpage-seo-audit"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8080/jobs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.ONPAGE_SEO_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"urls\": [\"https://example.com\"],\n  \"keywords\": [\"example\"],\n  \"sync\": true,\n  \"render_mode\": \"static\"\n}",
+        "options": {}
+      },
+      "id": "create_job",
+      "name": "Create SEO Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://api:8080/jobs/{{ $json.job_id }}/summary",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.ONPAGE_SEO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get_summary",
+      "name": "Fetch Slack Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://api:8080/suggestions?status=pending",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.ONPAGE_SEO_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "list_pending",
+      "name": "List Pending Suggestions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        280
+      ],
+      "notesInFlow": true,
+      "notes": "Human approval happens in dashboard/CLI. Apply only approved items; dry-run first."
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#seo-alerts"
+        },
+        "text": "={{ $json.text }}\\nPending suggestions: check dashboard or GET /suggestions?status=pending (also watch apply_failed alerts).",
+        "otherOptions": {}
+      },
+      "id": "slack",
+      "name": "Slack Notify",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        760,
+        100
+      ],
+      "notesInFlow": true,
+      "notes": "Configure Slack credentials. Never auto-apply without human approve."
+    }
+  ],
+  "connections": {
+    "Daily Schedule": {
+      "main": [
+        [
+          {
+            "node": "Create SEO Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create SEO Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CMS Publish Webhook": {
+      "main": [
+        [
+          {
+            "node": "Create SEO Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create SEO Job": {
+      "main": [
+        [
+          {
+            "node": "Fetch Slack Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "List Pending Suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Slack Summary": {
+      "main": [
+        [
+          {
+            "node": "Slack Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
